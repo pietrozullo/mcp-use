@@ -1,8 +1,8 @@
 """
-LangChain agent implementation for MCP tools.
+LangChain agent implementation for MCP tools with customizable system message.
 
 This module provides a LangChain agent implementation that can use MCP tools
-through a unified interface.
+through a unified interface, with support for customizable system messages.
 """
 
 from typing import Any, NoReturn
@@ -73,8 +73,15 @@ class LangChainAgent:
     through a unified interface.
     """
 
+    # Default system message if none is provided
+    DEFAULT_SYSTEM_MESSAGE = "You are a helpful AI assistant that can use tools to help users."
+
     def __init__(
-        self, connector: BaseConnector, llm: BaseLanguageModel, max_steps: int = 5
+        self,
+        connector: BaseConnector,
+        llm: BaseLanguageModel,
+        max_steps: int = 5,
+        system_message: str | None = None,
     ) -> None:
         """Initialize a new LangChain agent.
 
@@ -82,12 +89,27 @@ class LangChainAgent:
             connector: The MCP connector to use.
             llm: The LangChain LLM to use.
             max_steps: The maximum number of steps to take.
+            system_message: Optional custom system message to use.
         """
         self.connector = connector
         self.llm = llm
         self.max_steps = max_steps
+        self.system_message = system_message or self.DEFAULT_SYSTEM_MESSAGE
         self.tools: list[BaseTool] = []
         self.agent: AgentExecutor | None = None
+
+    def set_system_message(self, message: str) -> None:
+        """Set a new system message and recreate the agent.
+
+        Args:
+            message: The new system message.
+        """
+        self.system_message = message
+
+        # Recreate the agent with the new system message if it exists
+        if self.agent and self.tools:
+            self.agent = self._create_agent()
+            logger.info("Agent recreated with new system message")
 
     async def initialize(self) -> None:
         """Initialize the agent and its tools."""
@@ -184,7 +206,7 @@ class LangChainAgent:
         return langchain_tools
 
     def _create_agent(self) -> AgentExecutor:
-        """Create the LangChain agent.
+        """Create the LangChain agent with the configured system message.
 
         Returns:
             An initialized AgentExecutor.
@@ -193,7 +215,7 @@ class LangChainAgent:
             [
                 (
                     "system",
-                    "You are a helpful AI assistant that can use tools to help users.",
+                    self.system_message,
                 ),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{input}"),
@@ -234,7 +256,25 @@ class LangChainAgent:
         if chat_history is None:
             chat_history = []
 
+        # Add a hint to use tools for queries about current information
+        enhanced_query = query
+        if any(
+            keyword in query.lower()
+            for keyword in [
+                "weather",
+                "current",
+                "today",
+                "now",
+                "latest",
+                "news",
+                "price",
+                "stock",
+            ]
+        ):
+            # Just log this, don't modify the query
+            logger.info("Query involves current information that may benefit from tool use")
+
         # Invoke with all required variables
-        result = await self.agent.ainvoke({"input": query, "chat_history": chat_history})
+        result = await self.agent.ainvoke({"input": enhanced_query, "chat_history": chat_history})
 
         return result["output"]
