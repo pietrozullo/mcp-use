@@ -5,13 +5,14 @@ This module provides a connector for communicating with MCP implementations
 through the standard input/output streams.
 """
 
+import sys
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from mcp.types import Tool
+from mcp.types import CallToolResult, Tool
 
 from ..logging import logger
+from ..task_managers import ConnectionManager, StdioConnectionManager
 from .base import BaseConnector
 
 
@@ -19,7 +20,8 @@ class StdioConnector(BaseConnector):
     """Connector for MCP implementations using stdio transport.
 
     This connector uses the stdio transport to communicate with MCP implementations
-    that are executed as child processes.
+    that are executed as child processes. It uses a connection manager to handle
+    the proper lifecycle management of the stdio client.
     """
 
     def __init__(
@@ -27,6 +29,7 @@ class StdioConnector(BaseConnector):
         command: str = "npx",
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        errlog=sys.stderr,
     ):
         """Initialize a new stdio connector.
 
@@ -34,52 +37,102 @@ class StdioConnector(BaseConnector):
             command: The command to execute.
             args: Optional command line arguments.
             env: Optional environment variables.
+            errlog: Stream to write error output to.
         """
         self.command = command
-        self.args = args
+        self.args = args or []  # Ensure args is never None
         self.env = env
+        self.errlog = errlog
         self.client: ClientSession | None = None
-        self._stdio_ctx = None
+        self._connection_manager: ConnectionManager | None = None
         self._tools: list[Tool] | None = None
+        self._connected = False
 
     async def connect(self) -> None:
         """Establish a connection to the MCP implementation."""
-        server_params = StdioServerParameters(command=self.command, args=self.args, env=self.env)
-        self._stdio_ctx = stdio_client(server_params)
-        read_stream, write_stream = await self._stdio_ctx.__aenter__()
-        self.client = ClientSession(read_stream, write_stream, sampling_callback=None)
-        await self.client.__aenter__()
+        if self._connected:
+            logger.debug("Already connected to MCP implementation")
+            return
+
+        logger.info(f"Connecting to MCP implementation: {self.command}")
+        try:
+            # Create server parameters
+            server_params = StdioServerParameters(
+                command=self.command, args=self.args, env=self.env
+            )
+
+            # Create and start the connection manager
+            self._connection_manager = StdioConnectionManager(server_params, self.errlog)
+            read_stream, write_stream = await self._connection_manager.start()
+
+            # Create the client session
+            self.client = ClientSession(read_stream, write_stream, sampling_callback=None)
+            await self.client.__aenter__()
+
+            # Mark as connected
+            self._connected = True
+            logger.info(f"Successfully connected to MCP implementation: {self.command}")
+
+        except Exception as e:
+            logger.error(f"Failed to connect to MCP implementation: {e}")
+
+            # Clean up any resources if connection failed
+            await self._cleanup_resources()
+
+            # Re-raise the original exception
+            raise
 
     async def disconnect(self) -> None:
         """Close the connection to the MCP implementation."""
-        try:
-            if self.client:
+        if not self._connected:
+            logger.debug("Not connected to MCP implementation")
+            return
+
+        logger.info("Disconnecting from MCP implementation")
+        await self._cleanup_resources()
+        self._connected = False
+        logger.info("Disconnected from MCP implementation")
+
+    async def _cleanup_resources(self) -> None:
+        """Clean up all resources associated with this connector."""
+        errors = []
+
+        # First close the client session
+        if self.client:
+            try:
+                logger.debug("Closing client session")
                 await self.client.__aexit__(None, None, None)
+            except Exception as e:
+                error_msg = f"Error closing client session: {e}"
+                logger.warning(error_msg)
+                errors.append(error_msg)
+            finally:
                 self.client = None
-            if self._stdio_ctx:
-                await self._stdio_ctx.__aexit__(None, None, None)
-                self._stdio_ctx = None
-        except Exception as e:
-            logger.warning(f"Warning: Error during stdio connector disconnect: {e}")
-        finally:
-            # Always clean up references even if there were errors
-            self.client = None
-            self._stdio_ctx = None
-            self._tools = None
 
-    async def __aenter__(self) -> "StdioConnector":
-        """Enter the async context manager."""
-        await self.connect()
-        return self
+        # Then stop the connection manager
+        if self._connection_manager:
+            try:
+                logger.debug("Stopping connection manager")
+                await self._connection_manager.stop()
+            except Exception as e:
+                error_msg = f"Error stopping connection manager: {e}"
+                logger.warning(error_msg)
+                errors.append(error_msg)
+            finally:
+                self._connection_manager = None
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit the async context manager."""
-        await self.disconnect()
+        # Reset tools
+        self._tools = None
+
+        if errors:
+            logger.warning(f"Encountered {len(errors)} errors during resource cleanup")
 
     async def initialize(self) -> dict[str, Any]:
         """Initialize the MCP session and return session information."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
+
+        logger.info("Initializing MCP session")
 
         # Initialize the session
         result = await self.client.initialize()
@@ -87,6 +140,8 @@ class StdioConnector(BaseConnector):
         # Get available tools
         tools_result = await self.client.list_tools()
         self._tools = tools_result.tools
+
+        logger.info(f"MCP session initialized with {len(self._tools)} tools")
 
         return result
 
@@ -97,16 +152,21 @@ class StdioConnector(BaseConnector):
             raise RuntimeError("MCP client is not initialized")
         return self._tools
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult:
         """Call an MCP tool with the given arguments."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
-        return await self.client.call_tool(name, arguments)
+
+        logger.debug(f"Calling tool '{name}' with arguments: {arguments}")
+        result = await self.client.call_tool(name, arguments)
+        return result
 
     async def list_resources(self) -> list[dict[str, Any]]:
         """List all available resources from the MCP implementation."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
+
+        logger.debug("Listing resources")
         resources = await self.client.list_resources()
         return resources
 
@@ -114,6 +174,8 @@ class StdioConnector(BaseConnector):
         """Read a resource by URI."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
+
+        logger.debug(f"Reading resource: {uri}")
         resource = await self.client.read_resource(uri)
         return resource.content, resource.mimeType
 
@@ -121,4 +183,6 @@ class StdioConnector(BaseConnector):
         """Send a raw request to the MCP implementation."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
+
+        logger.debug(f"Sending request: {method} with params: {params}")
         return await self.client.request({"method": method, "params": params or {}})
