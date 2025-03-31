@@ -9,6 +9,7 @@ import json
 from typing import Any
 
 from .config import create_connector_from_config, load_config_file
+from .logging import logger
 from .session import MCPSession
 
 
@@ -183,40 +184,55 @@ class MCPClient:
         Raises:
             ValueError: If no active session exists or the specified session doesn't exist.
         """
-        session = self.get_session(server_name)
-        await session.disconnect()
-
-        # Remove the session
+        # Determine which server to close
         if server_name is None:
+            if self.active_session is None:
+                logger.warning("No active session to close")
+                return
             server_name = self.active_session
 
-        if server_name in self.sessions:
+        # Check if the session exists
+        if server_name not in self.sessions:
+            logger.warning(f"No session exists for server '{server_name}', nothing to close")
+            return
+
+        # Get the session
+        session = self.sessions[server_name]
+
+        try:
+            # Disconnect from the session
+            logger.info(f"Closing session for server '{server_name}'")
+            await session.disconnect()
+        except Exception as e:
+            logger.error(f"Error closing session for server '{server_name}': {e}")
+        finally:
+            # Remove the session regardless of whether disconnect succeeded
             del self.sessions[server_name]
 
-        # If we closed the active session, set active_session to None
-        if server_name == self.active_session:
-            self.active_session = None
+            # If we closed the active session, set active_session to None
+            if server_name == self.active_session:
+                self.active_session = None
 
     async def close_all_sessions(self) -> None:
-        """Close all active sessions."""
-        for server_name in list(self.sessions.keys()):
-            await self.close_session(server_name)
+        """Close all active sessions.
 
-    async def __aenter__(self) -> "MCPClient":
-        """Enter the async context manager.
-
-        Creates a session for the first available server if no sessions exist.
-
-        Returns:
-            The client instance.
+        This method ensures all sessions are closed even if some fail.
         """
-        if not self.sessions and self.config.get("mcpServers"):
-            await self.create_session()
-        return self
+        # Get a list of all session names first to avoid modification during iteration
+        server_names = list(self.sessions.keys())
+        errors = []
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit the async context manager.
+        for server_name in server_names:
+            try:
+                logger.info(f"Closing session for server '{server_name}'")
+                await self.close_session(server_name)
+            except Exception as e:
+                error_msg = f"Failed to close session for server '{server_name}': {e}"
+                logger.error(error_msg)
+                errors.append(error_msg)
 
-        Closes all active sessions.
-        """
-        await self.close_all_sessions()
+        # Log summary if there were errors
+        if errors:
+            logger.error(f"Encountered {len(errors)} errors while closing sessions")
+        else:
+            logger.info("All sessions closed successfully")
