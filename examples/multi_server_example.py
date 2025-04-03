@@ -52,21 +52,12 @@ async def run_multi_server_example():
     # Create agent with the client
     agent = MCPAgent(llm=llm, client=client, max_steps=30)
 
-    try:
-        # Example 1: Using tools from different servers in a single query
-        result = await agent.run(
-            "Search for a nice place to stay in Barcelona on Airbnb, "
-            "then use Google to find nearby restaurants and attractions."
-            "Write the result in the current directory in restarant.txt",
-            max_steps=30,
-        )
-        print("\nMulti-server query result:")
-        print(result)
-
-    finally:
-        # Ensure we clean up resources properly
-        if client.sessions:
-            await client.close_all_sessions()
+    # Example 1: Using tools from different servers in a single query
+    result = await agent.run(
+        "hello",
+        max_steps=30,
+    )
+    print(result)
 
 
 if __name__ == "__main__":

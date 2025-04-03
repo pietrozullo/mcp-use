@@ -294,7 +294,7 @@ class MCPAgent:
             # If using client with session, close the session through client
             if self.client and self._sessions:
                 logger.debug("Closing session through client")
-                await self.client.close_all_sessions(self.server_name)
+                await self.client.close_all_sessions()
                 self._session = None
             # If using direct connector, disconnect
             elif self.connectors:
