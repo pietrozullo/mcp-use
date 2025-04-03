@@ -54,7 +54,9 @@ async def run_multi_server_example():
 
     # Example 1: Using tools from different servers in a single query
     result = await agent.run(
-        "hello",
+        "Search for a nice place to stay in Barcelona on Airbnb, "
+        "then use Google to find nearby restaurants and attractions."
+        "Write the result in the current directory in restarant.txt",
         max_steps=30,
     )
     print(result)
