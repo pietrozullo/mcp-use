@@ -78,7 +78,7 @@ class LangChainAgent:
 
     def __init__(
         self,
-        connector: BaseConnector,
+        connectors: list[BaseConnector],
         llm: BaseLanguageModel,
         max_steps: int = 5,
         system_message: str | None = None,
@@ -91,7 +91,7 @@ class LangChainAgent:
             max_steps: The maximum number of steps to take.
             system_message: Optional custom system message to use.
         """
-        self.connector = connector
+        self.connectors = connectors
         self.llm = llm
         self.max_steps = max_steps
         self.system_message = system_message or self.DEFAULT_SYSTEM_MESSAGE
@@ -139,67 +139,70 @@ class LangChainAgent:
         Returns:
             A list of LangChain tools created from MCP tools.
         """
-        tools = self.connector.tools
-        local_connector = self.connector
-
-        # Wrap MCP tools into LangChain tools
         langchain_tools: list[BaseTool] = []
-        for tool in tools:
-            # Define adapter class to convert MCP tool to LangChain format
-            class McpToLangChainAdapter(BaseTool):
-                name: str = tool.name or "NO NAME"
-                description: str = tool.description or ""
-                # Convert JSON schema to Pydantic model for argument validation
-                args_schema: type[BaseModel] = jsonschema_to_pydantic(
-                    self.fix_schema(tool.inputSchema)  # Apply schema conversion
-                )
-                connector: BaseConnector = local_connector
-                handle_tool_error: bool = True
 
-                def _run(self, **kwargs: Any) -> NoReturn:
-                    """Synchronous run method that always raises an error.
+        for connector in self.connectors:
+            tools = connector.tools
+            local_connector = connector
 
-                    Raises:
-                        NotImplementedError: Always raises this error because MCP tools
-                            only support async operations.
-                    """
-                    raise NotImplementedError("MCP tools only support async operations")
+            # Wrap MCP tools into LangChain tools
+            for tool in tools:
+                # Define adapter class to convert MCP tool to LangChain format
+                class McpToLangChainAdapter(BaseTool):
+                    name: str = tool.name or "NO NAME"
+                    description: str = tool.description or ""
+                    # Convert JSON schema to Pydantic model for argument validation
+                    args_schema: type[BaseModel] = jsonschema_to_pydantic(
+                        self.fix_schema(tool.inputSchema)  # Apply schema conversion
+                    )
+                    connector: BaseConnector = local_connector
+                    handle_tool_error: bool = True
 
-                async def _arun(self, **kwargs: Any) -> Any:
-                    """Asynchronously execute the tool with given arguments.
+                    def _run(self, **kwargs: Any) -> NoReturn:
+                        """Synchronous run method that always raises an error.
 
-                    Args:
-                        kwargs: The arguments to pass to the tool.
+                        Raises:
+                            NotImplementedError: Always raises this error because MCP tools
+                                only support async operations.
+                        """
+                        raise NotImplementedError("MCP tools only support async operations")
 
-                    Returns:
-                        The result of the tool execution.
+                    async def _arun(self, **kwargs: Any) -> Any:
+                        """Asynchronously execute the tool with given arguments.
 
-                    Raises:
-                        ToolException: If tool execution fails.
-                    """
-                    logger.info(f'MCP tool: "{self.name}" received input: {kwargs}')
+                        Args:
+                            kwargs: The arguments to pass to the tool.
 
-                    try:
-                        tool_result: CallToolResult = await self.connector.call_tool(
-                            self.name, kwargs
-                        )
+                        Returns:
+                            The result of the tool execution.
+
+                        Raises:
+                            ToolException: If tool execution fails.
+                        """
+                        logger.info(f'MCP tool: "{self.name}" received input: {kwargs}')
+
                         try:
-                            # Use the helper function to parse the result
-                            return _parse_mcp_tool_result(tool_result)
-                        except Exception as e:
-                            # Log the exception for debugging
-                            logger.error(f"Error parsing tool result: {e}")
-                            # Shortened line:
-                            return (
-                                f"Error parsing result: {e!s}; Raw content: {tool_result.content!r}"
+                            tool_result: CallToolResult = await self.connector.call_tool(
+                                self.name, kwargs
                             )
+                            try:
+                                # Use the helper function to parse the result
+                                return _parse_mcp_tool_result(tool_result)
+                            except Exception as e:
+                                # Log the exception for debugging
+                                logger.error(f"Error parsing tool result: {e}")
+                                # Shortened line:
+                                return (
+                                    f"Error parsing result: {e!s};"
+                                    f" Raw content: {tool_result.content!r}"
+                                )
 
-                    except Exception as e:
-                        if self.handle_tool_error:
-                            return f"Error executing MCP tool: {str(e)}"
-                        raise
+                        except Exception as e:
+                            if self.handle_tool_error:
+                                return f"Error executing MCP tool: {str(e)}"
+                            raise
 
-            langchain_tools.append(McpToLangChainAdapter())
+                langchain_tools.append(McpToLangChainAdapter())
 
         # Log available tools for debugging
         logger.info(f"Available tools: {[tool.name for tool in langchain_tools]}")
@@ -256,25 +259,7 @@ class LangChainAgent:
         if chat_history is None:
             chat_history = []
 
-        # Add a hint to use tools for queries about current information
-        enhanced_query = query
-        if any(
-            keyword in query.lower()
-            for keyword in [
-                "weather",
-                "current",
-                "today",
-                "now",
-                "latest",
-                "news",
-                "price",
-                "stock",
-            ]
-        ):
-            # Just log this, don't modify the query
-            logger.info("Query involves current information that may benefit from tool use")
-
         # Invoke with all required variables
-        result = await self.agent.ainvoke({"input": enhanced_query, "chat_history": chat_history})
+        result = await self.agent.ainvoke({"input": query, "chat_history": chat_history})
 
         return result["output"]

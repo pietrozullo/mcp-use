@@ -31,7 +31,7 @@ class MCPAgent:
         self,
         llm: BaseLanguageModel,
         client: MCPClient | None = None,
-        connector: BaseConnector | None = None,
+        connectors: list[BaseConnector] | None = None,
         server_name: str | None = None,
         max_steps: int = 5,
         auto_initialize: bool = False,
@@ -45,7 +45,7 @@ class MCPAgent:
         Args:
             llm: The LangChain LLM to use.
             client: The MCPClient to use. If provided, connector is ignored.
-            connector: The MCP connector to use if client is not provided.
+            connectors: A list of MCP connectors to use if client is not provided.
             server_name: The name of the server to use if client is provided.
             max_steps: The maximum number of steps to take.
             auto_initialize: Whether to automatically initialize the agent when run is called.
@@ -56,7 +56,7 @@ class MCPAgent:
         """
         self.llm = llm
         self.client = client
-        self.connector = connector
+        self.connectors = connectors
         self.server_name = server_name
         self.max_steps = max_steps
         self.auto_initialize = auto_initialize
@@ -70,34 +70,35 @@ class MCPAgent:
         self.additional_instructions = additional_instructions
 
         # Either client or connector must be provided
-        if not client and not connector:
+        if not client and len(connectors) == 0:
             raise ValueError("Either client or connector must be provided")
 
         self._agent: LangChainAgent | None = None
-        self._session: MCPSession | None = None
+        self._sessions: dict[str, MCPSession] | None = None
         self._system_message: SystemMessage | None = None
 
     async def initialize(self) -> None:
         """Initialize the MCP client and agent."""
         # If using client, get or create a session
         if self.client:
-            try:
-                self._session = self.client.get_session(self.server_name)
-            except ValueError:
-                self._session = await self.client.create_session(self.server_name)
-            connector_to_use = self._session.connector
+            # First try to get existing sessions
+            self._sessions = self.client.get_all_active_sessions()
+
+            # If no active sessions exist, create new ones
+            if not self._sessions:
+                self._sessions = await self.client.create_all_sessions()
+            connectors_to_use = [session.connector for session in self._sessions.values()]
         else:
             # Using direct connector
-            connector_to_use = self.connector
-            await connector_to_use.connect()
-            await connector_to_use.initialize()
-
+            connectors_to_use = self.connectors
+            await [c_to_use.connect() for c_to_use in connectors_to_use]
+            await [c_to_use.initialize() for c_to_use in connectors_to_use]
         # Create the system message based on available tools
-        await self._create_system_message(connector_to_use)
+        await self._create_system_message(connectors_to_use)
 
         # Create the agent
         self._agent = LangChainAgent(
-            connector=connector_to_use,
+            connectors=connectors_to_use,
             llm=self.llm,
             max_steps=self.max_steps,
             system_message=(self._system_message.content if self._system_message else None),
@@ -107,7 +108,7 @@ class MCPAgent:
         await self._agent.initialize()
         self._initialized = True
 
-    async def _create_system_message(self, connector: BaseConnector) -> None:
+    async def _create_system_message(self, connectors: list[BaseConnector]) -> None:
         """Create the system message based on available tools.
 
         Args:
@@ -119,15 +120,17 @@ class MCPAgent:
             return
 
         # Otherwise, build the system prompt from the template and tool descriptions
-        tools = connector.tools
-
-        # Generate tool descriptions
         tool_descriptions = []
-        for tool in tools:
-            # Escape curly braces in the description by doubling them
-            # (sometimes e.g. blender mcp they are used in the description)
-            description = f"- {tool.name}: {tool.description.replace('{', '{{').replace('}', '}}')}"
-            tool_descriptions.append(description)
+        for connector in connectors:
+            tools = connector.tools
+            # Generate tool descriptions
+            for tool in tools:
+                # Escape curly braces in the description by doubling them
+                # (sometimes e.g. blender mcp they are used in the description)
+                description = (
+                    f"- {tool.name}: {tool.description.replace('{', '{{').replace('}', '}}')}"
+                )
+                tool_descriptions.append(description)
 
         # Format the system prompt template with tool descriptions
         system_prompt = self.system_prompt_template.format(
@@ -140,7 +143,6 @@ class MCPAgent:
 
         # Create the system message
         self._system_message = SystemMessage(content=system_prompt)
-        logger.info(f"Created system message with {len(tools)} tool descriptions")
 
     def get_conversation_history(self) -> list[BaseMessage]:
         """Get the current conversation history.
@@ -290,14 +292,15 @@ class MCPAgent:
                 self._agent = None
 
             # If using client with session, close the session through client
-            if self.client and self._session:
+            if self.client and self._sessions:
                 logger.debug("Closing session through client")
-                await self.client.close_session(self.server_name)
+                await self.client.close_all_sessions(self.server_name)
                 self._session = None
             # If using direct connector, disconnect
-            elif self.connector:
-                logger.debug("Disconnecting connector")
-                await self.connector.disconnect()
+            elif self.connectors:
+                for connector in self.connectors:
+                    logger.debug("Disconnecting connector")
+                    await connector.disconnect()
 
             self._initialized = False
             logger.info("Agent closed successfully")

@@ -32,7 +32,7 @@ class MCPClient:
         """
         self.config: dict[str, Any] = {}
         self.sessions: dict[str, MCPSession] = {}
-        self.active_session: str | None = None
+        self.active_sessions: list[str] = []
 
         # Load configuration if provided
         if config is not None:
@@ -84,9 +84,9 @@ class MCPClient:
         if "mcpServers" in self.config and name in self.config["mcpServers"]:
             del self.config["mcpServers"][name]
 
-            # If we removed the active session, set active_session to None
-            if name == self.active_session:
-                self.active_session = None
+            # If we removed an active session, remove it from active_sessions
+            if name in self.active_sessions:
+                self.active_sessions.remove(name)
 
     def get_server_names(self) -> list[str]:
         """Get the list of configured server names.
@@ -105,17 +105,11 @@ class MCPClient:
         with open(filepath, "w") as f:
             json.dump(self.config, f, indent=2)
 
-    async def create_session(
-        self,
-        server_name: str | None = None,
-        auto_initialize: bool = True,
-    ) -> MCPSession:
+    async def create_session(self, server_name: str, auto_initialize: bool = True) -> MCPSession:
         """Create a session for the specified server.
 
         Args:
             server_name: The name of the server to create a session for.
-                        If None, uses the first available server.
-            auto_initialize: Whether to automatically initialize the session.
 
         Returns:
             The created MCPSession.
@@ -128,10 +122,6 @@ class MCPClient:
         if not servers:
             raise ValueError("No MCP servers defined in config")
 
-        # If server_name not specified, use the first one
-        if not server_name:
-            server_name = next(iter(servers.keys()))
-
         if server_name not in servers:
             raise ValueError(f"Server '{server_name}' not found in config")
 
@@ -140,57 +130,80 @@ class MCPClient:
 
         # Create the session
         session = MCPSession(connector)
-        self.sessions[server_name] = session
-
-        # Make this the active session
-        self.active_session = server_name
-
-        # Initialize if requested
         if auto_initialize:
             await session.initialize()
+        self.sessions[server_name] = session
+
+        # Add to active sessions
+        if server_name not in self.active_sessions:
+            self.active_sessions.append(server_name)
 
         return session
 
-    def get_session(self, server_name: str | None = None) -> MCPSession:
+    async def create_all_sessions(
+        self,
+        auto_initialize: bool = True,
+    ) -> dict[str, MCPSession]:
+        """Create a session for the specified server.
+
+        Args:
+            auto_initialize: Whether to automatically initialize the session.
+
+        Returns:
+            The created MCPSession. If server_name is None, returns the first created session.
+
+        Raises:
+            ValueError: If no servers are configured or the specified server doesn't exist.
+        """
+        # Get server config
+        servers = self.config.get("mcpServers", {})
+        if not servers:
+            raise ValueError("No MCP servers defined in config")
+
+        # Create sessions for all servers
+        for name in servers:
+            session = await self.create_session(name, auto_initialize)
+            if auto_initialize:
+                await session.initialize()
+
+        return self.sessions
+
+    def get_session(self, server_name: str) -> MCPSession:
         """Get an existing session.
 
         Args:
             server_name: The name of the server to get the session for.
-                        If None, uses the active session.
+                        If None, uses the first active session.
 
         Returns:
             The MCPSession for the specified server.
 
         Raises:
-            ValueError: If no active session exists or the specified session doesn't exist.
+            ValueError: If no active sessions exist or the specified session doesn't exist.
         """
-        if server_name is None:
-            if self.active_session is None:
-                raise ValueError("No active session")
-            server_name = self.active_session
-
         if server_name not in self.sessions:
             raise ValueError(f"No session exists for server '{server_name}'")
 
         return self.sessions[server_name]
 
-    async def close_session(self, server_name: str | None = None) -> None:
+    def get_all_active_sessions(self) -> dict[str, MCPSession]:
+        """Get all active sessions.
+
+        Returns:
+            Dictionary mapping server names to their MCPSession instances.
+        """
+        return {name: self.sessions[name] for name in self.active_sessions if name in self.sessions}
+
+    async def close_session(self, server_name: str) -> None:
         """Close a session.
 
         Args:
             server_name: The name of the server to close the session for.
-                        If None, uses the active session.
+                        If None, uses the first active session.
 
         Raises:
-            ValueError: If no active session exists or the specified session doesn't exist.
+            ValueError: If no active sessions exist or the specified session doesn't exist.
         """
-        # Determine which server to close
-        if server_name is None:
-            if self.active_session is None:
-                logger.warning("No active session to close")
-                return
-            server_name = self.active_session
-
         # Check if the session exists
         if server_name not in self.sessions:
             logger.warning(f"No session exists for server '{server_name}', nothing to close")
@@ -209,9 +222,9 @@ class MCPClient:
             # Remove the session regardless of whether disconnect succeeded
             del self.sessions[server_name]
 
-            # If we closed the active session, set active_session to None
-            if server_name == self.active_session:
-                self.active_session = None
+            # Remove from active_sessions
+            if server_name in self.active_sessions:
+                self.active_sessions.remove(server_name)
 
     async def close_all_sessions(self) -> None:
         """Close all active sessions.
