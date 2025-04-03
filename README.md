@@ -246,9 +246,70 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+# Multi-Server Support
+
+MCP-Use supports working with multiple MCP servers simultaneously, allowing you to combine tools from different servers in a single agent. This is useful for complex tasks that require multiple capabilities, such as web browsing combined with file operations or 3D modeling.
+
+## Configuration
+
+You can configure multiple servers in your configuration file:
+
+```json
+{
+  "mcpServers": {
+    "airbnb": {
+      "command": "npx",
+      "args": ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "env": {
+        "DISPLAY": ":1"
+      }
+    }
+  }
+}
+```
+
+## Usage
+
+The `MCPClient` class provides several methods for managing multiple servers:
+
+```python
+import asyncio
+from mcp_use import MCPClient, MCPAgent
+from langchain_anthropic import ChatAnthropic
+
+async def main():
+    # Create client with multiple servers
+    client = MCPClient.from_config_file("multi_server_config.json")
+
+    # Create agent with the client
+    agent = MCPAgent(
+        llm=ChatAnthropic(model="claude-3-5-sonnet-20240620"),
+        client=client
+    )
+
+    try:
+        # Run a query that uses tools from multiple servers
+        result = await agent.run(
+            "Search for a nice place to stay in Barcelona on Airbnb, "
+            "then use Google to find nearby restaurants and attractions."
+        )
+        print(result)
+    finally:
+        # Clean up all sessions
+        await client.close_all_sessions()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ## Roadmap
+
 <ul>
-<li>[ ] Multiple Servers at once </li>
+<li>[x] Multiple Servers at once </li>
 <li>[ ] Test remote connectors (http, ws)</li>
 <li>[ ] ... </li>
 </ul>
