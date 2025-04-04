@@ -43,9 +43,9 @@ def create_connector_from_config(server_config: dict[str, Any]) -> BaseConnector
     # HTTP connector
     elif "url" in server_config:
         return HttpConnector(
-            url=server_config["url"],
+            base_url=server_config["url"],
             headers=server_config.get("headers", None),
-            auth=server_config.get("auth", None),
+            auth_token=server_config.get("auth_token", None),
         )
 
     # WebSocket connector
@@ -53,7 +53,7 @@ def create_connector_from_config(server_config: dict[str, Any]) -> BaseConnector
         return WebSocketConnector(
             url=server_config["ws_url"],
             headers=server_config.get("headers", None),
-            auth=server_config.get("auth", None),
+            auth_token=server_config.get("auth_token", None),
         )
 
     raise ValueError("Cannot determine connector type from config")
