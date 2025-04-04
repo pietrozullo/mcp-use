@@ -5,13 +5,13 @@ This module provides a connection manager for WebSocket-based MCP connections.
 """
 
 import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets.client import ClientConnection
 
 from ..logging import logger
 from .base import ConnectionManager
 
 
-class WebSocketConnectionManager(ConnectionManager[WebSocketClientProtocol]):
+class WebSocketConnectionManager(ConnectionManager[ClientConnection]):
     """Connection manager for WebSocket-based MCP connections.
 
     This class handles the lifecycle of WebSocket connections, ensuring proper
@@ -33,7 +33,7 @@ class WebSocketConnectionManager(ConnectionManager[WebSocketClientProtocol]):
         self.url = url
         self.headers = headers or {}
 
-    async def _establish_connection(self) -> WebSocketClientProtocol:
+    async def _establish_connection(self) -> ClientConnection:
         """Establish a WebSocket connection.
 
         Returns:
@@ -50,7 +50,7 @@ class WebSocketConnectionManager(ConnectionManager[WebSocketClientProtocol]):
             logger.error(f"Failed to connect to WebSocket: {e}")
             raise
 
-    async def _close_connection(self, connection: WebSocketClientProtocol) -> None:
+    async def _close_connection(self, connection: ClientConnection) -> None:
         """Close the WebSocket connection.
 
         Args:
