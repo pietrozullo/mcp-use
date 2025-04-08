@@ -22,6 +22,7 @@ dependencies = [
     "mcp",
     "langchain>=0.1.0",
     "langchain-community>=0.0.10",
+    "langchain-openai>=0.3.12",
     "websockets>=12.0",
     "aiohttp>=3.9.0",
     "pydantic>=2.0.0",
