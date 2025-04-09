@@ -39,6 +39,7 @@ class MCPAgent:
         system_prompt: str | None = None,
         system_prompt_template: str | None = None,
         additional_instructions: str | None = None,
+        disallowed_tools: list[str] | None = None,
     ):
         """Initialize a new MCPAgent instance.
 
@@ -53,6 +54,7 @@ class MCPAgent:
             system_prompt: Complete system prompt to use (overrides template if provided).
             system_prompt_template: Template for system prompt with {tool_descriptions} placeholder.
             additional_instructions: Extra instructions to append to the system prompt.
+            disallowed_tools: List of tool names that should not be available to the agent.
         """
         self.llm = llm
         self.client = client
@@ -63,6 +65,7 @@ class MCPAgent:
         self.memory_enabled = memory_enabled
         self._initialized = False
         self._conversation_history: list[BaseMessage] = []
+        self.disallowed_tools = disallowed_tools or []
 
         # System prompt configuration
         self.system_prompt = system_prompt
@@ -102,6 +105,7 @@ class MCPAgent:
             llm=self.llm,
             max_steps=self.max_steps,
             system_message=(self._system_message.content if self._system_message else None),
+            disallowed_tools=self.disallowed_tools,
         )
 
         # Initialize the agent
@@ -125,6 +129,10 @@ class MCPAgent:
             tools = connector.tools
             # Generate tool descriptions
             for tool in tools:
+                # Skip disallowed tools
+                if tool.name in self.disallowed_tools:
+                    continue
+
                 # Escape curly braces in the description by doubling them
                 # (sometimes e.g. blender mcp they are used in the description)
                 description = (
@@ -187,6 +195,33 @@ class MCPAgent:
         # Update the agent if initialized
         if self._agent:
             self._agent.set_system_message(message)
+
+    def set_disallowed_tools(self, disallowed_tools: list[str]) -> None:
+        """Set the list of tools that should not be available to the agent.
+
+        This will take effect the next time the agent is initialized.
+
+        Args:
+            disallowed_tools: List of tool names that should not be available.
+        """
+        self.disallowed_tools = disallowed_tools
+
+        # If the agent is already initialized, we need to reinitialize it
+        # to apply the changes to the available tools
+        if self._initialized:
+            logger.info(
+                "Agent already initialized. Changes will take effect on next initialization."
+            )
+            # We don't automatically reinitialize here as it could be disruptive
+            # to ongoing operations. The user can call initialize() explicitly if needed.
+
+    def get_disallowed_tools(self) -> list[str]:
+        """Get the list of tools that are not available to the agent.
+
+        Returns:
+            List of tool names that are not available.
+        """
+        return self.disallowed_tools
 
     async def run(
         self,

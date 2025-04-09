@@ -82,6 +82,7 @@ class LangChainAgent:
         llm: BaseLanguageModel,
         max_steps: int = 5,
         system_message: str | None = None,
+        disallowed_tools: list[str] | None = None,
     ) -> None:
         """Initialize a new LangChain agent.
 
@@ -90,11 +91,13 @@ class LangChainAgent:
             llm: The LangChain LLM to use.
             max_steps: The maximum number of steps to take.
             system_message: Optional custom system message to use.
+            disallowed_tools: List of tool names that should not be available to the agent.
         """
         self.connectors = connectors
         self.llm = llm
         self.max_steps = max_steps
         self.system_message = system_message or self.DEFAULT_SYSTEM_MESSAGE
+        self.disallowed_tools = disallowed_tools or []
         self.tools: list[BaseTool] = []
         self.agent: AgentExecutor | None = None
 
@@ -137,17 +140,16 @@ class LangChainAgent:
         """Create LangChain tools from MCP tools.
 
         Returns:
-            A list of LangChain tools created from MCP tools.
+            A list of LangChain tools that wrap MCP tools.
         """
-        langchain_tools: list[BaseTool] = []
-
+        tools = []
         for connector in self.connectors:
-            tools = connector.tools
-            local_connector = connector
+            local_connector = connector  # Capture for closure
+            for tool in connector.tools:
+                # Skip disallowed tools
+                if tool.name in self.disallowed_tools:
+                    continue
 
-            # Wrap MCP tools into LangChain tools
-            for tool in tools:
-                # Define adapter class to convert MCP tool to LangChain format
                 class McpToLangChainAdapter(BaseTool):
                     name: str = tool.name or "NO NAME"
                     description: str = tool.description or ""
@@ -202,11 +204,11 @@ class LangChainAgent:
                                 return f"Error executing MCP tool: {str(e)}"
                             raise
 
-                langchain_tools.append(McpToLangChainAdapter())
+                tools.append(McpToLangChainAdapter())
 
         # Log available tools for debugging
-        logger.info(f"Available tools: {[tool.name for tool in langchain_tools]}")
-        return langchain_tools
+        logger.info(f"Available tools: {[tool.name for tool in tools]}")
+        return tools
 
     def _create_agent(self) -> AgentExecutor:
         """Create the LangChain agent with the configured system message.
