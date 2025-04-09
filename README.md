@@ -307,25 +307,58 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## Roadmap
+# Tool Access Control
+
+MCP-Use allows you to restrict which tools are available to the agent, providing better security and control over agent capabilities:
+
+```python
+import asyncio
+from mcp_use import MCPAgent, MCPClient
+from langchain_openai import ChatOpenAI
+
+async def main():
+    # Create client
+    client = MCPClient.from_config_file("config.json")
+
+    # Create agent with restricted tools
+    agent = MCPAgent(
+        llm=ChatOpenAI(model="gpt-4"),
+        client=client,
+        disallowed_tools=["file_system", "network"]  # Restrict potentially dangerous tools
+    )
+
+    # Run a query with restricted tool access
+    result = await agent.run(
+        "Find the best restaurant in San Francisco"
+    )
+    print(result)
+
+    # Clean up
+    await client.close_all_sessions()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+# Roadmap
 
 <ul>
 <li>[x] Multiple Servers at once </li>
-<li>[ ] Test remote connectors (http, ws)</li>
+<li>[x] Test remote connectors (http, ws)</li>
 <li>[ ] ... </li>
 </ul>
 
-## Contributing
+# Contributing
 
 We love contributions! Feel free to open issues for bugs or feature requests.
 
-## Requirements
+# Requirements
 
 - Python 3.11+
 - MCP implementation (like Playwright MCP)
 - LangChain and appropriate model libraries (OpenAI, Anthropic, etc.)
 
-## Citation
+# Citation
 
 If you use MCP-Use in your research or project, please cite:
 
@@ -339,6 +372,6 @@ If you use MCP-Use in your research or project, please cite:
 }
 ```
 
-## License
+# License
 
 MIT

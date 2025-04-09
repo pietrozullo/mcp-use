@@ -82,6 +82,45 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## Restricting Tool Access
+
+You can control which tools are available to the agent:
+
+```python
+import asyncio
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from mcp_use import MCPAgent, MCPClient
+
+async def main():
+    # Load environment variables
+    load_dotenv()
+
+    # Create MCPClient from config file
+    client = MCPClient.from_config_file("browser_mcp.json")
+
+    # Create LLM
+    llm = ChatOpenAI(model="gpt-4o")
+
+    # Create agent with restricted tools
+    agent = MCPAgent(
+        llm=llm,
+        client=client,
+        max_steps=30,
+        disallowed_tools=["file_system", "network"]  # Restrict potentially dangerous tools
+    )
+
+    # Run the query
+    result = await agent.run(
+        "Find the best restaurant in San Francisco USING GOOGLE SEARCH",
+    )
+    print(f"\nResult: {result}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ## Available MCP Servers
 
 mcp_use supports various MCP servers:

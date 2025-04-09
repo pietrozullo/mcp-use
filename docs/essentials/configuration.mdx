@@ -96,28 +96,25 @@ Here's a basic example of how to configure an MCP server:
 ### Multiple Server Configuration
 
 You can configure multiple MCP servers in a single configuration file, allowing you to use different servers for different tasks or combine their capabilities (e.g.):
+
 ```json
 {
-        "mcpServers": {
-            "airbnb": {
-                "command": "npx",
-                "args": ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"],
-            },
-            "playwright": {
-                "command": "npx",
-                "args": ["@playwright/mcp@latest"],
-                "env": {"DISPLAY": ":1"},
-            },
-            "filesystem": {
-                "command": "npx",
-                "args": [
-                    "-y",
-                    "@modelcontextprotocol/server-filesystem",
-                    "/home/pietro/projects/mcp-use/",
-                ],
-            },
-        }
+  "mcpServers": {
+    "airbnb": {
+      "command": "npx",
+      "args": ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "env": { "DISPLAY": ":1" }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/pietro/projects/mcp-use/"]
     }
+  }
+}
 ```
 
 For a complete example of using multiple servers, see the [multi-server example](https://github.com/pietrozullo/mcp-use/blob/main/examples/multi_server_example.py) in our repository.
@@ -146,7 +143,8 @@ agent = MCPAgent(
     auto_initialize=True,
     memory_enabled=True,
     system_prompt="Custom instructions for the agent",
-    additional_instructions="Additional guidelines for specific tasks"
+    additional_instructions="Additional guidelines for specific tasks",
+    disallowed_tools=["file_system", "network", "shell"]  # Restrict potentially dangerous tools
 )
 ```
 
@@ -162,6 +160,35 @@ agent = MCPAgent(
 - `system_prompt`: Custom system prompt (optional)
 - `system_prompt_template`: Custom system prompt template (optional)
 - `additional_instructions`: Additional instructions for the agent (optional)
+- `disallowed_tools`: List of tool names that should not be available to the agent (optional)
+
+### Tool Access Control
+
+You can restrict which tools are available to the agent for security or to limit its capabilities:
+
+```python
+# Create agent with restricted tools
+agent = MCPAgent(
+    llm=ChatOpenAI(model="gpt-4o"),
+    client=client,
+    disallowed_tools=["file_system", "network", "shell"]  # Restrict potentially dangerous tools
+)
+
+# Update restrictions after initialization
+agent.set_disallowed_tools(["file_system", "network", "shell", "database"])
+await agent.initialize()  # Reinitialize to apply changes
+
+# Check current restrictions
+restricted_tools = agent.get_disallowed_tools()
+print(f"Restricted tools: {restricted_tools}")
+```
+
+This feature is useful for:
+
+- Restricting access to sensitive operations
+- Limiting agent capabilities for specific tasks
+- Preventing the agent from using potentially dangerous tools
+- Focusing the agent on specific functionality
 
 ## Error Handling
 

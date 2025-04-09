@@ -127,24 +127,26 @@ agent = MCPAgent(
     memory_enabled=True,
     system_prompt=None,
     system_prompt_template=None,
-    additional_instructions=None
+    additional_instructions=None,
+    disallowed_tools=None
 )
 ```
 
-| Parameter                 | Type                | Required | Default | Description                                |
-| ------------------------- | ------------------- | -------- | ------- | ------------------------------------------ |
-| `llm`                     | BaseLanguageModel   | Yes      | -       | Any LangChain-compatible language model    |
-| `client`                  | MCPClient           | No       | None    | The MCPClient instance                     |
-| `connectors`              | list[BaseConnector] | No       | None    | List of connectors if not using client     |
-| `server_name`             | str                 | No       | None    | Name of the server to use                  |
-| `max_steps`               | int                 | No       | 5       | Maximum number of steps the agent can take |
-| `auto_initialize`         | bool                | No       | False   | Whether to initialize automatically        |
-| `memory_enabled`          | bool                | No       | True    | Whether to enable memory                   |
-| `system_prompt`           | str                 | No       | None    | Custom system prompt                       |
-| `system_prompt_template`  | str                 | No       | None    | Custom system prompt template              |
-| `additional_instructions` | str                 | No       | None    | Additional instructions for the agent      |
-| `session_options`         | dict                | No       | {}      | Additional options for session creation    |
-| `output_parser`           | OutputParser        | No       | None    | Custom output parser for LLM responses     |
+| Parameter                 | Type                | Required | Default | Description                                                  |
+| ------------------------- | ------------------- | -------- | ------- | ------------------------------------------------------------ |
+| `llm`                     | BaseLanguageModel   | Yes      | -       | Any LangChain-compatible language model                      |
+| `client`                  | MCPClient           | No       | None    | The MCPClient instance                                       |
+| `connectors`              | list[BaseConnector] | No       | None    | List of connectors if not using client                       |
+| `server_name`             | str                 | No       | None    | Name of the server to use                                    |
+| `max_steps`               | int                 | No       | 5       | Maximum number of steps the agent can take                   |
+| `auto_initialize`         | bool                | No       | False   | Whether to initialize automatically                          |
+| `memory_enabled`          | bool                | No       | True    | Whether to enable memory                                     |
+| `system_prompt`           | str                 | No       | None    | Custom system prompt                                         |
+| `system_prompt_template`  | str                 | No       | None    | Custom system prompt template                                |
+| `additional_instructions` | str                 | No       | None    | Additional instructions for the agent                        |
+| `session_options`         | dict                | No       | {}      | Additional options for session creation                      |
+| `output_parser`           | OutputParser        | No       | None    | Custom output parser for LLM responses                       |
+| `disallowed_tools`        | list[str]           | No       | None    | List of tool names that should not be available to the agent |
 
 **When to use different parameters**:
 
@@ -176,6 +178,11 @@ agent = MCPAgent(
 - **session_options**:
   - Customize timeout for long-running server operations
   - Set retry parameters for unstable connections
+- **disallowed_tools**:
+  - Use to restrict which tools the agent can access
+  - Helpful for security or to limit agent capabilities
+  - Useful when certain tools might be dangerous or unnecessary for a specific task
+  - Can be updated after initialization using `set_disallowed_tools()`
 
 ### Core Methods
 
@@ -233,6 +240,39 @@ history = agent.get_history()
 - For debugging agent behavior
 - When implementing custom logging
 - To provide context for follow-up queries
+
+#### set_disallowed_tools
+
+Sets the list of tools that should not be available to the agent.
+
+```python
+agent.set_disallowed_tools(["tool1", "tool2"])
+```
+
+| Parameter          | Type      | Required | Description                                     |
+| ------------------ | --------- | -------- | ----------------------------------------------- |
+| `disallowed_tools` | list[str] | Yes      | List of tool names that should not be available |
+
+**When to use**:
+
+- To restrict access to specific tools for security reasons
+- To limit agent capabilities for specific tasks
+- To prevent the agent from using potentially dangerous tools
+- Note: Changes take effect on next initialization
+
+#### get_disallowed_tools
+
+Gets the list of tools that are not available to the agent.
+
+```python
+disallowed = agent.get_disallowed_tools()
+```
+
+**When to use**:
+
+- To check which tools are currently restricted
+- For debugging or auditing purposes
+- To verify tool restrictions before running the agent
 
 ## Configuration Details
 
@@ -383,3 +423,34 @@ This approach is useful when:
 - The MCP server returns structured data that needs special handling
 - You need to extract specific information from responses
 - You're integrating with custom or specialized MCP servers
+
+### Restricting Tool Access
+
+Control which tools are available to the agent:
+
+```python
+from mcp_use import MCPAgent, MCPClient
+from langchain_openai import ChatOpenAI
+
+# Create agent with restricted tools
+agent = MCPAgent(
+    llm=ChatOpenAI(model="gpt-4o"),
+    client=client,
+    disallowed_tools=["file_system", "network", "shell"]  # Restrict potentially dangerous tools
+)
+
+# Update restrictions after initialization
+agent.set_disallowed_tools(["file_system", "network", "shell", "database"])
+await agent.initialize()  # Reinitialize to apply changes
+
+# Check current restrictions
+restricted_tools = agent.get_disallowed_tools()
+print(f"Restricted tools: {restricted_tools}")
+```
+
+This approach is useful when:
+
+- You need to restrict access to sensitive operations
+- You want to limit the agent's capabilities for specific tasks
+- You're concerned about security implications of certain tools
+- You want to focus the agent on specific functionality
