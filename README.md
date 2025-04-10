@@ -17,6 +17,19 @@
 
 💡 Let developers easily connect any LLM to tools like web browsing, file operations, and more.
 
+# Features
+
+## ✨ Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔄 **Ease of use** | Create your first MCP capable agent you need only 6 lines of code |
+| 🤖 **LLM Flexibility** | Works with any langchain supported LLM that supports tool calling (OpenAI, Anthropic, Groq, LLama etc.) |
+| 🌐 **HTTP Support** | Direct connection to MCP servers running on specific HTTP ports |
+| 🧩 **Multi-Server Support** | Use multiple MCP servers simultaneously in a single agent |
+| 🛡️ **Tool Restrictions** | Restrict potentially dangerous tools like file system or network access |
+
+
 # Quick start
 
 With pip:
@@ -53,7 +66,6 @@ and add your API keys for the provider you want to use to your `.env` file.
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 ```
-
 
 > **Important**: Only models with tool calling capabilities can be used with mcp_use. Make sure your chosen model supports function calling or tool use.
 
@@ -126,8 +138,9 @@ Example configuration file (`browser_mcp.json`):
 }
 ```
 
-
 For other settings, models, and more, check out the documentation.
+
+# Features
 
 # Example Use Cases
 
@@ -285,6 +298,55 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+## HTTP Connection Example
+
+MCP-Use now supports HTTP connections, allowing you to connect to MCP servers running on specific HTTP ports. This feature is particularly useful for integrating with web-based MCP servers.
+
+Here's an example of how to use the HTTP connection feature:
+
+```python
+import asyncio
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from mcp_use import MCPAgent, MCPClient
+
+async def main():
+    """Run the example using a configuration file."""
+    # Load environment variables
+    load_dotenv()
+
+    config = {
+        "mcpServers": {
+            "http": {
+                "url": "http://localhost:8931/sse"
+            }
+        }
+    }
+
+    # Create MCPClient from config file
+    client = MCPClient.from_dict(config)
+
+    # Create LLM
+    llm = ChatOpenAI(model="gpt-4o")
+
+    # Create agent with the client
+    agent = MCPAgent(llm=llm, client=client, max_steps=30)
+
+    # Run the query
+    result = await agent.run(
+        "Find the best restaurant in San Francisco USING GOOGLE SEARCH",
+        max_steps=30,
+    )
+    print(f"\nResult: {result}")
+
+if __name__ == "__main__":
+    # Run the appropriate example
+    asyncio.run(main())
+```
+
+This example demonstrates how to connect to an MCP server running on a specific HTTP port. Make sure to start your MCP server before running this example.
 
 # Multi-Server Support
 

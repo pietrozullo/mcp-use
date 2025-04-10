@@ -175,13 +175,57 @@ if __name__ == "__main__":
 
 ## Available MCP Servers
 
-mcp_use supports various MCP servers:
+mcp_use supports any MCP server, allowing you to connect to a wide range of server implementations. For a comprehensive list of available servers, check out the [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) repository.
 
-- **Playwright**: For web browsing and automation
-- **Airbnb**: For property search and booking
-- **Blender**: For 3D modeling and animation
 
 Each server requires its own configuration. Check the [Configuration Guide](/essentials/configuration) for details.
+
+## HTTP Connection
+
+mcp_use now supports HTTP connections, allowing you to connect to MCP servers running on specific HTTP ports. This feature is particularly useful for integrating with web-based MCP servers.
+
+Here's a simple example to get you started with HTTP connections:
+
+```python
+import asyncio
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from mcp_use import MCPAgent, MCPClient
+
+async def main():
+    # Load environment variables
+    load_dotenv()
+
+    # Create configuration dictionary
+    config = {
+      "mcpServers": {
+        "http": {
+          "url": "http://localhost:8931/sse"
+        }
+      }
+    }
+
+    # Create MCPClient from configuration dictionary
+    client = MCPClient.from_dict(config)
+
+    # Create LLM
+    llm = ChatOpenAI(model="gpt-4o")
+
+    # Create agent with the client
+    agent = MCPAgent(llm=llm, client=client, max_steps=30)
+
+    # Run the query
+    result = await agent.run(
+        "Find the best restaurant in San Francisco USING GOOGLE SEARCH",
+    )
+    print(f"\nResult: {result}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+This example demonstrates how to connect to an MCP server running on a specific HTTP port. Make sure to start your MCP server before running this example.
 
 ## Next Steps
 
