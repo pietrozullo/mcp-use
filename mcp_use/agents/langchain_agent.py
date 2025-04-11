@@ -112,7 +112,7 @@ class LangChainAgent:
         # Recreate the agent with the new system message if it exists
         if self.agent and self.tools:
             self.agent = self._create_agent()
-            logger.info("Agent recreated with new system message")
+            logger.debug("Agent recreated with new system message")
 
     async def initialize(self) -> None:
         """Initialize the agent and its tools."""
@@ -181,7 +181,7 @@ class LangChainAgent:
                         Raises:
                             ToolException: If tool execution fails.
                         """
-                        logger.info(f'MCP tool: "{self.name}" received input: {kwargs}')
+                        logger.debug(f'MCP tool: "{self.name}" received input: {kwargs}')
 
                         try:
                             tool_result: CallToolResult = await self.connector.call_tool(
@@ -207,7 +207,7 @@ class LangChainAgent:
                 tools.append(McpToLangChainAdapter())
 
         # Log available tools for debugging
-        logger.info(f"Available tools: {[tool.name for tool in tools]}")
+        logger.debug(f"Available tools: {[tool.name for tool in tools]}")
         return tools
 
     def _create_agent(self) -> AgentExecutor:

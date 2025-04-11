@@ -209,7 +209,7 @@ class MCPAgent:
         # If the agent is already initialized, we need to reinitialize it
         # to apply the changes to the available tools
         if self._initialized:
-            logger.info(
+            logger.debug(
                 "Agent already initialized. Changes will take effect on next initialization."
             )
             # We don't automatically reinitialize here as it could be disruptive
@@ -254,11 +254,11 @@ class MCPAgent:
         try:
             # Initialize if needed
             if manage_connector and (not self._initialized or not self._agent):
-                logger.info("Initializing agent before running query")
+                logger.debug("Initializing agent before running query")
                 await self.initialize()
                 initialized_here = True
             elif not self._initialized and self.auto_initialize:
-                logger.info("Auto-initializing agent before running query")
+                logger.debug("Auto-initializing agent before running query")
                 await self.initialize()
                 initialized_here = True
 
@@ -289,7 +289,7 @@ class MCPAgent:
                 # Other message types can be handled here if needed
 
             # Run the query with the specified max_steps or default
-            logger.info(f"Running query with max_steps={max_steps or self.max_steps}")
+            logger.debug(f"Running query with max_steps={max_steps or self.max_steps}")
             result = await self._agent.run(
                 query=query,
                 max_steps=max_steps,
@@ -307,7 +307,7 @@ class MCPAgent:
             # If we initialized in this method and there was an error,
             # make sure to clean up
             if initialized_here and manage_connector:
-                logger.info("Cleaning up resources after initialization error")
+                logger.debug("Cleaning up resources after initialization error")
                 await self.close()
             raise
 
@@ -315,7 +315,7 @@ class MCPAgent:
             # Clean up resources if we're managing the connector and
             # we're not using a client that manages sessions
             if manage_connector and not self.client and not initialized_here:
-                logger.info("Closing agent after query completion")
+                logger.debug("Closing agent after query completion")
                 await self.close()
 
     async def close(self) -> None:
@@ -338,7 +338,7 @@ class MCPAgent:
                     await connector.disconnect()
 
             self._initialized = False
-            logger.info("Agent closed successfully")
+            logger.debug("Agent closed successfully")
 
         except Exception as e:
             logger.error(f"Error during agent closure: {e}")

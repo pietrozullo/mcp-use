@@ -49,7 +49,7 @@ class StdioConnector(BaseConnector):
             logger.debug("Already connected to MCP implementation")
             return
 
-        logger.info(f"Connecting to MCP implementation: {self.command}")
+        logger.debug(f"Connecting to MCP implementation: {self.command}")
         try:
             # Create server parameters
             server_params = StdioServerParameters(
@@ -66,7 +66,7 @@ class StdioConnector(BaseConnector):
 
             # Mark as connected
             self._connected = True
-            logger.info(f"Successfully connected to MCP implementation: {self.command}")
+            logger.debug(f"Successfully connected to MCP implementation: {self.command}")
 
         except Exception as e:
             logger.error(f"Failed to connect to MCP implementation: {e}")

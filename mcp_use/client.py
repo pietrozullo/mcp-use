@@ -214,7 +214,7 @@ class MCPClient:
 
         try:
             # Disconnect from the session
-            logger.info(f"Closing session for server '{server_name}'")
+            logger.debug(f"Closing session for server '{server_name}'")
             await session.disconnect()
         except Exception as e:
             logger.error(f"Error closing session for server '{server_name}': {e}")
@@ -237,7 +237,7 @@ class MCPClient:
 
         for server_name in server_names:
             try:
-                logger.info(f"Closing session for server '{server_name}'")
+                logger.debug(f"Closing session for server '{server_name}'")
                 await self.close_session(server_name)
             except Exception as e:
                 error_msg = f"Failed to close session for server '{server_name}': {e}"
@@ -248,4 +248,4 @@ class MCPClient:
         if errors:
             logger.error(f"Encountered {len(errors)} errors while closing sessions")
         else:
-            logger.info("All sessions closed successfully")
+            logger.debug("All sessions closed successfully")

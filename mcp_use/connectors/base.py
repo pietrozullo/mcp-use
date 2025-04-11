@@ -39,10 +39,10 @@ class BaseConnector(ABC):
             logger.debug("Not connected to MCP implementation")
             return
 
-        logger.info("Disconnecting from MCP implementation")
+        logger.debug("Disconnecting from MCP implementation")
         await self._cleanup_resources()
         self._connected = False
-        logger.info("Disconnected from MCP implementation")
+        logger.debug("Disconnected from MCP implementation")
 
     async def _cleanup_resources(self) -> None:
         """Clean up all resources associated with this connector."""
@@ -83,7 +83,7 @@ class BaseConnector(ABC):
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
-        logger.info("Initializing MCP session")
+        logger.debug("Initializing MCP session")
 
         # Initialize the session
         result = await self.client.initialize()
@@ -92,7 +92,7 @@ class BaseConnector(ABC):
         tools_result = await self.client.list_tools()
         self._tools = tools_result.tools
 
-        logger.info(f"MCP session initialized with {len(self._tools)} tools")
+        logger.debug(f"MCP session initialized with {len(self._tools)} tools")
 
         return result
 
@@ -110,6 +110,7 @@ class BaseConnector(ABC):
 
         logger.debug(f"Calling tool '{name}' with arguments: {arguments}")
         result = await self.client.call_tool(name, arguments)
+        logger.debug(f"Tool '{name}' called with result: {result}")
         return result
 
     async def list_resources(self) -> list[dict[str, Any]]:

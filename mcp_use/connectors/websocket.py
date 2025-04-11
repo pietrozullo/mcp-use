@@ -57,7 +57,7 @@ class WebSocketConnector(BaseConnector):
             logger.debug("Already connected to MCP implementation")
             return
 
-        logger.info(f"Connecting to MCP implementation via WebSocket: {self.url}")
+        logger.debug(f"Connecting to MCP implementation via WebSocket: {self.url}")
         try:
             # Create and start the connection manager
             self._connection_manager = WebSocketConnectionManager(self.url, self.headers)
@@ -70,7 +70,7 @@ class WebSocketConnector(BaseConnector):
 
             # Mark as connected
             self._connected = True
-            logger.info(f"Successfully connected to MCP implementation via WebSocket: {self.url}")
+            logger.debug(f"Successfully connected to MCP implementation via WebSocket: {self.url}")
 
         except Exception as e:
             logger.error(f"Failed to connect to MCP implementation via WebSocket: {e}")
@@ -117,10 +117,10 @@ class WebSocketConnector(BaseConnector):
             logger.debug("Not connected to MCP implementation")
             return
 
-        logger.info("Disconnecting from MCP implementation")
+        logger.debug("Disconnecting from MCP implementation")
         await self._cleanup_resources()
         self._connected = False
-        logger.info("Disconnected from MCP implementation")
+        logger.debug("Disconnected from MCP implementation")
 
     async def _cleanup_resources(self) -> None:
         """Clean up all resources associated with this connector."""
@@ -199,14 +199,14 @@ class WebSocketConnector(BaseConnector):
 
     async def initialize(self) -> dict[str, Any]:
         """Initialize the MCP session and return session information."""
-        logger.info("Initializing MCP session")
+        logger.debug("Initializing MCP session")
         result = await self._send_request("initialize")
 
         # Get available tools
         tools_result = await self.list_tools()
         self._tools = [Tool(**tool) for tool in tools_result]
 
-        logger.info(f"MCP session initialized with {len(self._tools)} tools")
+        logger.debug(f"MCP session initialized with {len(self._tools)} tools")
         return result
 
     async def list_tools(self) -> list[dict[str, Any]]:

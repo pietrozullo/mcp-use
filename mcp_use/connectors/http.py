@@ -51,7 +51,7 @@ class HttpConnector(BaseConnector):
             logger.debug("Already connected to MCP implementation")
             return
 
-        logger.info(f"Connecting to MCP implementation via HTTP/SSE: {self.base_url}")
+        logger.debug(f"Connecting to MCP implementation via HTTP/SSE: {self.base_url}")
         try:
             # Create the SSE connection URL
             sse_url = f"{self.base_url}"
@@ -68,7 +68,7 @@ class HttpConnector(BaseConnector):
 
             # Mark as connected
             self._connected = True
-            logger.info(
+            logger.debug(
                 f"Successfully connected to MCP implementation via HTTP/SSE: {self.base_url}"
             )
 
