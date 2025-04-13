@@ -4,7 +4,7 @@
 
 <h1 align="center">Open Source MCP CLient Library </h1>
 
-[![](https://img.shields.io/pypi/dd/mcp_use.svg)](https://pypi.org/project/mcp_use/)
+[![](https://img.shields.io/pypi/dw/mcp_use.svg)](https://pypi.org/project/mcp_use/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/mcp_use.svg)](https://pypi.org/project/mcp_use/)
 [![PyPI Version](https://img.shields.io/pypi/v/mcp_use.svg)](https://pypi.org/project/mcp_use/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/mcp_use.svg)](https://pypi.org/project/mcp_use/)
