@@ -61,28 +61,31 @@ class ServerManager:
         list_servers_tool = StructuredTool.from_function(
             coroutine=self.list_servers,
             name="list_mcp_servers",
-            description="Lists all available MCP servers that can be connected to",
+            description="Lists all available MCP (Model Context Protocol) servers that can be "
+            "connected to, along with the tools available on each server. "
+            "Use this tool to discover servers and see what functionalities they offer.",
             args_schema=ListServersInput,
         )
 
         connect_server_tool = StructuredTool.from_function(
             coroutine=self.connect_to_server,
             name="connect_to_mcp_server",
-            description="Connect to a specific MCP server to use its tools",
+            description="Connect to a specific MCP (Model Context Protocol) server to use its "
+            "tools. Use this tool to connect to a specific server and use its tools.",
             args_schema=ServerActionInput,
         )
 
         get_active_server_tool = StructuredTool.from_function(
             coroutine=self.get_active_server,
             name="get_active_mcp_server",
-            description="Get the currently active MCP server",
+            description="Get the currently active MCP (Model Context Protocol) server",
             args_schema=CurrentServerInput,
         )
 
         switch_server_tool = StructuredTool.from_function(
             coroutine=self.switch_server,
             name="switch_mcp_server",
-            description="Switch to a different MCP server",
+            description="Switch to a different MCP (Model Context Protocol) server",
             args_schema=ServerActionInput,
         )
 
@@ -94,19 +97,64 @@ class ServerManager:
         ]
 
     async def list_servers(self) -> str:
-        """List all available MCP servers.
+        """List all available MCP servers along with their available tools.
 
         Returns:
-            String listing all available servers
+            String listing all available servers and their tools.
         """
         servers = self.client.get_server_names()
         if not servers:
             return "No MCP servers are currently defined."
 
         result = "Available MCP servers:\n"
-        for i, server in enumerate(servers):
-            active_marker = " (ACTIVE)" if server == self.active_server else ""
-            result += f"{i+1}. {server}{active_marker}\n"
+        for i, server_name in enumerate(servers):
+            active_marker = " (ACTIVE)" if server_name == self.active_server else ""
+            result += f"{i+1}. {server_name}{active_marker}\n"
+
+            tools: list[BaseTool] = []
+            try:
+                # Check cache first
+                if server_name in self._server_tools:
+                    tools = self._server_tools[server_name]
+                else:
+                    # Attempt to get/create session without setting active
+                    session = None
+                    try:
+                        session = self.client.get_session(server_name)
+                        logger.debug(
+                            f"Using existing session for server '{server_name}' to list tools."
+                        )
+                    except ValueError:
+                        try:
+                            # Only create session if needed, don't set active
+                            session = await self.client.create_session(server_name)
+                            logger.debug(f"Temporarily created session for server '{server_name}'")
+                        except Exception:
+                            logger.warning(f"Could not create session for server '{server_name}'")
+
+                    # Fetch tools if session is available
+                    if session:
+                        try:
+                            connector = session.connector
+                            fetched_tools = await self.adapter.create_langchain_tools([connector])
+                            self._server_tools[server_name] = fetched_tools  # Cache tools
+                            self.initialized_servers[server_name] = True  # Mark as initialized
+                            tools = fetched_tools
+                            logger.debug(f"Fetched {len(tools)} tools for server '{server_name}'.")
+                        except Exception as e:
+                            logger.warning(f"Could not fetch tools for server '{server_name}': {e}")
+                            # Keep tools as empty list if fetching failed
+
+                # Append tool names to the result string
+                if tools:
+                    tool_names = ", ".join([tool.name for tool in tools])
+                    result += f"   Tools: {tool_names}\n"
+                else:
+                    result += "   Tools: (Could not retrieve or none available)\n"
+
+            except Exception as e:
+                logger.error(f"Unexpected error listing tools for server '{server_name}': {e}")
+                result += "   Tools: (Error retrieving tools)\n"
 
         return result
 
@@ -149,9 +197,17 @@ class ServerManager:
                 )
                 self.initialized_servers[server_name] = True
 
-            num_tools = len(self._server_tools.get(server_name, []))
+            server_tools = self._server_tools.get(server_name, [])
+            num_tools = len(server_tools)
+
+            tool_descriptions = "\nAvailable tools for this server:\n"
+            for i, tool in enumerate(server_tools):
+                tool_descriptions += f"{i+1}. {tool.name}: {tool.description}\n"
+
             return (
-                f"Connected to MCP server '{server_name}'. " f"{num_tools} tools are now available."
+                f"Connected to MCP server '{server_name}'. "
+                f"{num_tools} tools are now available."
+                f"{tool_descriptions}"
             )
 
         except Exception as e:
