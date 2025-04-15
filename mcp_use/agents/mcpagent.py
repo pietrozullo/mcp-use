@@ -6,7 +6,6 @@ to provide a simple interface for using MCP tools with different LLMs.
 """
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain.globals import set_debug
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain.schema.language_model import BaseLanguageModel
@@ -24,8 +23,6 @@ from ..logging import logger
 from .prompts.system_prompt_builder import create_system_message
 from .prompts.templates import DEFAULT_SYSTEM_PROMPT_TEMPLATE, SERVER_MANAGER_SYSTEM_PROMPT_TEMPLATE
 from .server_manager import ServerManager
-
-set_debug(True)
 
 
 class MCPAgent:
@@ -49,6 +46,7 @@ class MCPAgent:
         additional_instructions: str | None = None,
         disallowed_tools: list[str] | None = None,
         use_server_manager: bool = False,
+        verbose: bool = False,
     ):
         """Initialize a new MCPAgent instance.
 
@@ -77,7 +75,7 @@ class MCPAgent:
         self._conversation_history: list[BaseMessage] = []
         self.disallowed_tools = disallowed_tools or []
         self.use_server_manager = use_server_manager
-
+        self.verbose = verbose
         # System prompt configuration
         self.system_prompt = system_prompt  # User-provided full prompt override
         # User can provide a template override, otherwise use the imported default
@@ -133,8 +131,9 @@ class MCPAgent:
                     if not hasattr(connector, "client") or connector.client is None:
                         await connector.connect()
 
+            tools = [tool for connector in connectors_to_use for tool in connector.tools]
             # Create the system message based on available tools
-            await self._create_system_message(connectors_to_use)
+            await self._create_system_message_from_tools(tools)
 
             # Create LangChain tools using the adapter
             # (adapter will handle initialization if needed)
@@ -198,7 +197,7 @@ class MCPAgent:
 
         # Use the standard AgentExecutor
         executor = AgentExecutor(
-            agent=agent, tools=self._tools, max_iterations=self.max_steps, verbose=True
+            agent=agent, tools=self._tools, max_iterations=self.max_steps, verbose=self.verbose
         )
         logger.debug(f"Created agent executor with max_iterations={self.max_steps}")
         return executor
