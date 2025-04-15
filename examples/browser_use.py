@@ -35,7 +35,7 @@ async def main():
 
     # Run the query
     result = await agent.run(
-        "Find the best restaurant in San Francisco USING GOOGLE SEARCH",
+        "Navigate to https://github.com/mcp-use/mcp-use and write a summary of the project",
         max_steps=30,
     )
     print(f"\nResult: {result}")

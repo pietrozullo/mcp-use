@@ -22,7 +22,7 @@ config = {
             "args": [
                 "-y",
                 "@modelcontextprotocol/server-filesystem",
-                "/home/pietro/projects/mcp-use/",
+                "THE_PATH_TO_YOUR_DIRECTORY",
             ],
         }
     }
