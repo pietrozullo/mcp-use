@@ -168,6 +168,7 @@ class MCPAgent:
             ]
             self._conversation_history = [self._system_message] + history_without_system
 
+
     def _create_agent(self) -> AgentExecutor:
         """Create the LangChain agent with the configured system message.
 
@@ -187,6 +188,7 @@ class MCPAgent:
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ]
+
         )
 
         tool_names = [tool.name for tool in self._tools]
@@ -198,6 +200,45 @@ class MCPAgent:
         # Use the standard AgentExecutor
         executor = AgentExecutor(
             agent=agent, tools=self._tools, max_iterations=self.max_steps, verbose=self.verbose
+        )
+        logger.debug(f"Created agent executor with max_iterations={self.max_steps}")
+        return executor
+
+        # Add to conversation history if memory is enabled
+        if self.memory_enabled:
+            self._conversation_history = [self._system_message]
+
+    def _create_agent(self) -> AgentExecutor:
+        """Create the LangChain agent with the configured system message.
+
+        Returns:
+            An initialized AgentExecutor.
+        """
+        logger.debug(f"Creating new agent with {len(self._tools)} tools")
+
+        # Get system message content or default
+        system_content = "You are a helpful assistant"
+        if self._system_message:
+            system_content = self._system_message.content
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    system_content,
+                ),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
+
+        tool_names = [tool.name for tool in self._tools]
+        logger.debug(f"Available tools for agent: {tool_names}")
+
+        agent = create_tool_calling_agent(llm=self.llm, tools=self._tools, prompt=prompt)
+        executor = AgentExecutor(
+            agent=agent, tools=self._tools, max_iterations=self.max_steps, verbose=False
         )
         logger.debug(f"Created agent executor with max_iterations={self.max_steps}")
         return executor
@@ -435,6 +476,7 @@ class MCPAgent:
                 result = f"Agent stopped after reaching the maximum number of steps ({steps})."
 
             # Add the final response to conversation history if memory is enabled
+
             if self.memory_enabled:
                 self.add_to_history(AIMessage(content=result))
 
