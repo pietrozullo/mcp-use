@@ -121,6 +121,65 @@ Example configuration file (`browser_mcp.json`):
 }
 ```
 
+## Using Multiple Servers
+
+The `MCPClient` can be configured with multiple MCP servers, allowing your agent to access tools from different sources. This capability enables complex workflows spanning various domains (e.g., web browsing and API interaction).
+
+**Configuration:**
+
+Define multiple servers in your configuration file (`multi_server_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "airbnb": {
+      "command": "npx",
+      "args": ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "env": {
+        "DISPLAY": ":1"
+      }
+    }
+  }
+}
+```
+
+**Usage:**
+
+When an `MCPClient` with multiple servers is passed to an `MCPAgent`, the agent gains access to tools from all configured servers. By default, you might need to guide the agent or explicitly specify which server to use for a given task using the `server_name` parameter in the `agent.run()` method.
+
+```python
+# Assuming MCPClient is initialized with the multi_server_config.json
+client = MCPClient.from_config_file("multi_server_config.json")
+agent = MCPAgent(llm=llm, client=client) # Server manager not enabled by default
+
+# Manually specify the server if needed
+result = await agent.run(
+    "Search for Airbnb listings in Barcelona",
+    server_name="airbnb"
+)
+```
+
+## Enabling Dynamic Server Selection (Server Manager)
+
+To improve efficiency and potentially reduce agent confusion when many tools are available, you can enable the Server Manager. Set `use_server_manager=True` when creating the `MCPAgent`.
+
+When enabled, the agent will automatically select the appropriate server based on the tool chosen by the LLM for each step. This avoids connecting to unnecessary servers.
+
+```python
+# Assuming MCPClient is initialized with the multi_server_config.json
+client = MCPClient.from_config_file("multi_server_config.json")
+agent = MCPAgent(llm=llm, client=client, use_server_manager=True) # Enable server manager
+
+# The agent can now use tools from both airbnb and playwright servers
+result = await agent.run(
+    "Search for a place in Barcelona on Airbnb, then Google nearby restaurants."
+)
+```
+
 ## Restricting Tool Access
 
 You can control which tools are available to the agent:
@@ -176,7 +235,6 @@ if __name__ == "__main__":
 ## Available MCP Servers
 
 mcp_use supports any MCP server, allowing you to connect to a wide range of server implementations. For a comprehensive list of available servers, check out the [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) repository.
-
 
 Each server requires its own configuration. Check the [Configuration Guide](/essentials/configuration) for details.
 

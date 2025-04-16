@@ -28,6 +28,7 @@
 | 🔄 **Ease of use** | Create your first MCP capable agent you need only 6 lines of code |
 | 🤖 **LLM Flexibility** | Works with any langchain supported LLM that supports tool calling (OpenAI, Anthropic, Groq, LLama etc.) |
 | 🌐 **HTTP Support** | Direct connection to MCP servers running on specific HTTP ports |
+| ⚙️ **Dynamic Server Selection** | Agents can dynamically choose the most appropriate MCP server for a given task from the available pool |
 | 🧩 **Multi-Server Support** | Use multiple MCP servers simultaneously in a single agent |
 | 🛡️ **Tool Restrictions** | Restrict potentially dangerous tools like file system or network access |
 
@@ -351,7 +352,7 @@ This example demonstrates how to connect to an MCP server running on a specific 
 
 # Multi-Server Support
 
-MCP-Use supports working with multiple MCP servers simultaneously, allowing you to combine tools from different servers in a single agent. This is useful for complex tasks that require multiple capabilities, such as web browsing combined with file operations or 3D modeling.
+MCP-Use allows configuring and connecting to multiple MCP servers simultaneously using the `MCPClient`. This enables complex workflows that require tools from different servers, such as web browsing combined with file operations or 3D modeling.
 
 ## Configuration
 
@@ -377,7 +378,28 @@ You can configure multiple servers in your configuration file:
 
 ## Usage
 
-The `MCPClient` class provides several methods for managing multiple servers:
+The `MCPClient` class provides methods for managing connections to multiple servers. When creating an `MCPAgent`, you can provide an `MCPClient` configured with multiple servers.
+
+By default, the agent will have access to tools from all configured servers. If you need to target a specific server for a particular task, you can specify the `server_name` when calling the `agent.run()` method.
+
+```python
+# Example: Manually selecting a server for a specific task
+result = await agent.run(
+    "Search for Airbnb listings in Barcelona",
+    server_name="airbnb" # Explicitly use the airbnb server
+)
+
+result_google = await agent.run(
+    "Find restaurants near the first result using Google Search",
+    server_name="playwright" # Explicitly use the playwright server
+)
+```
+
+## Dynamic Server Selection (Server Manager)
+
+For enhanced efficiency and to reduce potential agent confusion when dealing with many tools from different servers, you can enable the Server Manager by setting `use_server_manager=True` during `MCPAgent` initialization.
+
+When enabled, the agent intelligently selects the correct MCP server based on the tool chosen by the LLM for a specific step. This minimizes unnecessary connections and ensures the agent uses the appropriate tools for the task.
 
 ```python
 import asyncio
@@ -391,7 +413,8 @@ async def main():
     # Create agent with the client
     agent = MCPAgent(
         llm=ChatAnthropic(model="claude-3-5-sonnet-20240620"),
-        client=client
+        client=client,
+        use_server_manager=True  # Enable the Server Manager
     )
 
     try:

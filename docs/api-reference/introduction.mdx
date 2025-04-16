@@ -128,7 +128,8 @@ agent = MCPAgent(
     system_prompt=None,
     system_prompt_template=None,
     additional_instructions=None,
-    disallowed_tools=None
+    disallowed_tools=None,
+    use_server_manager=False
 )
 ```
 
@@ -146,6 +147,7 @@ agent = MCPAgent(
 | `additional_instructions` | str                 | No       | None    | Additional instructions for the agent                        |
 | `session_options`         | dict                | No       | {}      | Additional options for session creation                      |
 | `output_parser`           | OutputParser        | No       | None    | Custom output parser for LLM responses                       |
+| `use_server_manager`      | bool                | No       | False   | If `True`, enables automatic selection of the appropriate server based on the chosen tool when multiple servers are configured via `MCPClient`. |
 | `disallowed_tools`        | list[str]           | No       | None    | List of tool names that should not be available to the agent |
 
 **When to use different parameters**:
@@ -178,6 +180,9 @@ agent = MCPAgent(
 - **session_options**:
   - Customize timeout for long-running server operations
   - Set retry parameters for unstable connections
+- **use_server_manager**:
+  - Set to `True` when using an `MCPClient` configured with multiple servers to enable efficient, automatic server selection per tool call. This can reduce agent confusion and minimize unnecessary server connections.
+  - Keep as `False` (default) if using a single server or if you prefer to manually specify the target server using the `server_name` parameter in `agent.run()` or rely on the agent to handle tool availability across all connected servers.
 - **disallowed_tools**:
   - Use to restrict which tools the agent can access
   - Helpful for security or to limit agent capabilities
