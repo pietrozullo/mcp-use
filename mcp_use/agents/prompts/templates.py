@@ -33,7 +33,7 @@ ensure you are connected to the correct server and aware of its
 available tools. If unsure, use 'list_mcp_servers' to see options
 or 'get_active_mcp_server' to check the current connection.
 
-When you connect to a server using 'connect_to_mcp_server' or 'switch_mcp_server',
+When you connect to a server using 'connect_to_mcp_server',
  you will be informed about the new tools that become available.
 You can then use these server-specific tools in subsequent steps.
 

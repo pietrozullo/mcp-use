@@ -13,6 +13,12 @@ class ServerActionInput(BaseModel):
     server_name: str = Field(description="The name of the MCP server")
 
 
+class DisconnectServerInput(BaseModel):
+    """Empty input for disconnecting from the current server"""
+
+    pass
+
+
 class ListServersInput(BaseModel):
     """Empty input for listing available servers"""
 
@@ -82,18 +88,19 @@ class ServerManager:
             args_schema=CurrentServerInput,
         )
 
-        switch_server_tool = StructuredTool.from_function(
-            coroutine=self.switch_server,
-            name="switch_mcp_server",
-            description="Switch to a different MCP (Model Context Protocol) server",
-            args_schema=ServerActionInput,
+        disconnect_server_tool = StructuredTool.from_function(
+            func=None,
+            coroutine=self.disconnect_from_server,
+            name="disconnect_from_mcp_server",
+            description="Disconnect from the currently active MCP (Model Context Protocol) server",
+            args_schema=DisconnectServerInput,
         )
 
         return [
             list_servers_tool,
             connect_server_tool,
             get_active_server_tool,
-            switch_server_tool,
+            disconnect_server_tool,
         ]
 
     async def list_servers(self) -> str:
@@ -109,7 +116,7 @@ class ServerManager:
         result = "Available MCP servers:\n"
         for i, server_name in enumerate(servers):
             active_marker = " (ACTIVE)" if server_name == self.active_server else ""
-            result += f"{i+1}. {server_name}{active_marker}\n"
+            result += f"{i + 1}. {server_name}{active_marker}\n"
 
             tools: list[BaseTool] = []
             try:
@@ -202,7 +209,7 @@ class ServerManager:
 
             tool_descriptions = "\nAvailable tools for this server:\n"
             for i, tool in enumerate(server_tools):
-                tool_descriptions += f"{i+1}. {tool.name}: {tool.description}\n"
+                tool_descriptions += f"{i + 1}. {tool.name}: {tool.description}\n"
 
             return (
                 f"Connected to MCP server '{server_name}'. "
@@ -227,17 +234,29 @@ class ServerManager:
             )
         return f"Currently active MCP server: {self.active_server}"
 
-    async def switch_server(self, server_name: str) -> str:
-        """Switch to a different MCP server.
-
-        Args:
-            server_name: The name of the server to switch to
+    async def disconnect_from_server(self) -> str:
+        """Disconnect from the currently active MCP server.
 
         Returns:
-            Status message about the switch
+            Status message about the disconnection
         """
-        # This is just an alias for connect_to_server for clarity in the UI
-        return await self.connect_to_server(server_name)
+
+        if not self.active_server:
+            return "No MCP server is currently active, so there's nothing to disconnect from."
+
+        server_name = self.active_server
+        try:
+            # Clear the active server
+            self.active_server = None
+
+            # Note: We're not actually closing the session here, just 'deactivating'
+            # This way we keep the session cache without requiring reconnection if needed again
+            # TODO: consider closing the sessions
+
+            return f"Successfully disconnected from MCP server '{server_name}'."
+        except Exception as e:
+            logger.error(f"Error disconnecting from server '{server_name}': {e}")
+            return f"Failed to disconnect from server '{server_name}': {str(e)}"
 
     async def get_active_server_tools(self) -> list[BaseTool]:
         """Get the tools for the currently active server.
