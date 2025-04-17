@@ -69,7 +69,7 @@ class MCPAgent:
             disallowed_tools: List of tool names that should not be available to the agent.
             use_server_manager: Whether to use server manager mode instead of exposing all tools.
         """
-        logger.info("Hello boss")
+        logger.info("🤖 Initializing MCPAgent...")
         self.llm = llm
         self.client = client
         self.connectors = connectors or []
@@ -110,12 +110,16 @@ class MCPAgent:
 
     async def initialize(self) -> None:
         """Initialize the MCP client and agent."""
+        logger.info("🚀 Initializing MCP agent and connecting to services...")
         # If using server manager, initialize it
         if self.use_server_manager and self.server_manager:
             await self.server_manager.initialize()
             # Get server management tools
             management_tools = await self.server_manager.get_server_management_tools()
             self._tools = management_tools
+            logger.info(
+                f"🔧 Server manager mode active with {len(management_tools)} management tools"
+            )
 
             # Create the system message based on available tools
             await self._create_system_message_from_tools(self._tools)
@@ -124,30 +128,38 @@ class MCPAgent:
             if self.client:
                 # First try to get existing sessions
                 self._sessions = self.client.get_all_active_sessions()
+                logger.info(f"🔌 Found {len(self._sessions)} existing sessions")
 
                 # If no active sessions exist, create new ones
                 if not self._sessions:
+                    logger.info("🔄 No active sessions found, creating new ones...")
                     self._sessions = await self.client.create_all_sessions()
+                    logger.info(f"✅ Created {len(self._sessions)} new sessions")
                 connectors_to_use = [session.connector for session in self._sessions.values()]
             else:
                 # Using direct connector - only establish connection
                 # LangChainAdapter will handle initialization
                 connectors_to_use = self.connectors
+                logger.info(f"🔗 Connecting to {len(connectors_to_use)} direct connectors...")
                 for connector in connectors_to_use:
                     if not hasattr(connector, "client") or connector.client is None:
                         await connector.connect()
 
             tools = [tool for connector in connectors_to_use for tool in connector.tools]
+            logger.info(f"🧰 Found {len(tools)} tools across all connectors")
+
             # Create the system message based on available tools
             await self._create_system_message_from_tools(tools)
 
             # Create LangChain tools using the adapter
             # (adapter will handle initialization if needed)
             self._tools = await self.adapter.create_langchain_tools(connectors_to_use)
+            logger.info(f"🛠️ Created {len(self._tools)} LangChain tools")
 
         # Create the agent
         self._agent_executor = self._create_agent()
         self._initialized = True
+        logger.info("✨ Agent initialization complete")
 
     async def _create_system_message_from_tools(self, tools: list[BaseTool]) -> None:
         """Create the system message based on provided tools using the builder."""
@@ -196,7 +208,7 @@ class MCPAgent:
         )
 
         tool_names = [tool.name for tool in self._tools]
-        logger.debug(f"Available tools for agent: {tool_names}")
+        logger.info(f"🧠 Agent ready with tools: {', '.join(tool_names)}")
 
         # Use the standard create_tool_calling_agent
         agent = create_tool_calling_agent(llm=self.llm, tools=self._tools, prompt=prompt)
@@ -204,45 +216,6 @@ class MCPAgent:
         # Use the standard AgentExecutor
         executor = AgentExecutor(
             agent=agent, tools=self._tools, max_iterations=self.max_steps, verbose=self.verbose
-        )
-        logger.debug(f"Created agent executor with max_iterations={self.max_steps}")
-        return executor
-
-        # Add to conversation history if memory is enabled
-        if self.memory_enabled:
-            self._conversation_history = [self._system_message]
-
-    def _create_agent(self) -> AgentExecutor:
-        """Create the LangChain agent with the configured system message.
-
-        Returns:
-            An initialized AgentExecutor.
-        """
-        logger.debug(f"Creating new agent with {len(self._tools)} tools")
-
-        # Get system message content or default
-        system_content = "You are a helpful assistant"
-        if self._system_message:
-            system_content = self._system_message.content
-
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    system_content,
-                ),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
-        )
-
-        tool_names = [tool.name for tool in self._tools]
-        logger.debug(f"Available tools for agent: {tool_names}")
-
-        agent = create_tool_calling_agent(llm=self.llm, tools=self._tools, prompt=prompt)
-        executor = AgentExecutor(
-            agent=agent, tools=self._tools, max_iterations=self.max_steps, verbose=False
         )
         logger.debug(f"Created agent executor with max_iterations={self.max_steps}")
         return executor
@@ -363,11 +336,11 @@ class MCPAgent:
         try:
             # Initialize if needed
             if manage_connector and not self._initialized:
-                logger.debug("Initializing agent before running query")
+                logger.info("🔄 Initializing agent before running query...")
                 await self.initialize()
                 initialized_here = True
             elif not self._initialized and self.auto_initialize:
-                logger.debug("Auto-initializing agent before running query")
+                logger.info("🔄 Auto-initializing agent before running query...")
                 await self.initialize()
                 initialized_here = True
 
@@ -378,6 +351,13 @@ class MCPAgent:
             steps = max_steps or self.max_steps
             if self._agent_executor:
                 self._agent_executor.max_iterations = steps
+
+            display_query = (
+                query[:50].replace("\n", " ") + "..."
+                if len(query) > 50
+                else query.replace("\n", " ")
+            )
+            logger.info(f"💬 Received query: '{display_query}'")
 
             # Add the user query to conversation history if memory is enabled
             if self.memory_enabled:
@@ -406,7 +386,7 @@ class MCPAgent:
                 [tool.name for tool in self._tools], excluded_colors=["green", "red"]
             )
 
-            logger.debug(f"Running unified step-by-step with max_steps={steps}")
+            logger.info(f"🏁 Starting agent execution with max_steps={steps}")
 
             for step_num in range(steps):
                 # --- Check for tool updates if using server manager ---
@@ -416,9 +396,9 @@ class MCPAgent:
                     existing_tool_names = {tool.name for tool in self._tools}
 
                     if current_tool_names != existing_tool_names:
-                        logger.debug(
-                            f"Tools changed before step {step_num + 1}, updating agent. "
-                            f"New tools: {current_tool_names}"
+                        logger.info(
+                            f"🔄 Tools changed before step {step_num + 1}, updating agent. "
+                            f"New tools: {', '.join(current_tool_names)}"
                         )
                         self._tools = current_tools
                         # Regenerate system message with ALL current tools
@@ -431,6 +411,8 @@ class MCPAgent:
                         color_mapping = get_color_mapping(
                             [tool.name for tool in self._tools], excluded_colors=["green", "red"]
                         )
+
+                logger.info(f"🔍 Step {step_num + 1}/{steps}")
 
                 # --- Plan and execute the next step ---
                 try:
@@ -446,28 +428,43 @@ class MCPAgent:
 
                     # Process the output
                     if isinstance(next_step_output, AgentFinish):
-                        logger.debug(f"Agent finished at step {step_num + 1}.")
+                        logger.info(f"✅ Agent finished at step {step_num + 1}")
                         result = next_step_output.return_values.get("output", "No output generated")
                         break
 
                     # If it's actions/steps, add to intermediate steps
                     intermediate_steps.extend(next_step_output)
 
+                    # Log tool calls
+                    for action, output in next_step_output:
+                        tool_name = action.tool
+                        tool_input_str = str(action.tool_input)
+                        # Truncate long inputs for readability
+                        if len(tool_input_str) > 100:
+                            tool_input_str = tool_input_str[:97] + "..."
+                        logger.info(f"🔧 Tool call: {tool_name} with input: {tool_input_str}")
+                        # Truncate long outputs for readability
+                        output_str = str(output)
+                        if len(output_str) > 100:
+                            output_str = output_str[:97] + "..."
+                        output_str = output_str.replace("\n", " ")
+                        logger.info(f"📄 Tool result: {output_str}")
+
                     # Check for return_direct on the last action taken
                     if len(next_step_output) > 0:
                         last_step: tuple[AgentAction, str] = next_step_output[-1]
                         tool_return = self._agent_executor._get_tool_return(last_step)
                         if tool_return is not None:
-                            logger.debug(f"Tool returned directly at step {step_num + 1}.")
+                            logger.info(f"🏆 Tool returned directly at step {step_num + 1}")
                             result = tool_return.return_values.get("output", "No output generated")
                             break
 
                 except OutputParserException as e:
-                    logger.error(f"Output parsing error during step {step_num + 1}: {e}")
+                    logger.error(f"❌ Output parsing error during step {step_num + 1}: {e}")
                     result = f"Agent stopped due to a parsing error: {str(e)}"
                     break
                 except Exception as e:
-                    logger.error(f"Error during agent execution step {step_num + 1}: {e}")
+                    logger.error(f"❌ Error during agent execution step {step_num + 1}: {e}")
                     import traceback
 
                     traceback.print_exc()
@@ -476,31 +473,32 @@ class MCPAgent:
 
             # --- Loop finished ---
             if not result:
-                logger.warning(f"Agent stopped after reaching max iterations ({steps}).")
+                logger.warning(f"⚠️ Agent stopped after reaching max iterations ({steps})")
                 result = f"Agent stopped after reaching the maximum number of steps ({steps})."
 
             # Add the final response to conversation history if memory is enabled
-
             if self.memory_enabled:
                 self.add_to_history(AIMessage(content=result))
 
+            logger.info("🎉 Agent execution complete")
             return result
 
         except Exception as e:
-            logger.error(f"Error running query: {e}")
+            logger.error(f"❌ Error running query: {e}")
             if initialized_here and manage_connector:
-                logger.debug("Cleaning up resources after initialization error in run")
+                logger.info("🧹 Cleaning up resources after initialization error in run")
                 await self.close()
             raise
 
         finally:
             # Clean up if necessary (e.g., if not using client-managed sessions)
             if manage_connector and not self.client and not initialized_here:
-                logger.debug("Closing agent after query completion in run")
+                logger.info("🧹 Closing agent after query completion")
                 await self.close()
 
     async def close(self) -> None:
         """Close the MCP connection with improved error handling."""
+        logger.info("🔌 Closing agent and cleaning up resources...")
         try:
             # Clean up the agent first
             self._agent_executor = None
@@ -508,20 +506,20 @@ class MCPAgent:
 
             # If using client with session, close the session through client
             if self.client and self._sessions:
-                logger.debug("Closing session through client")
+                logger.info("🔄 Closing sessions through client")
                 await self.client.close_all_sessions()
                 self._sessions = {}
             # If using direct connector, disconnect
             elif self.connectors:
                 for connector in self.connectors:
-                    logger.debug("Disconnecting connector")
+                    logger.info("🔄 Disconnecting connector")
                     await connector.disconnect()
 
             self._initialized = False
-            logger.debug("Agent closed successfully")
+            logger.info("👋 Agent closed successfully")
 
         except Exception as e:
-            logger.error(f"Error during agent closure: {e}")
+            logger.error(f"❌ Error during agent closure: {e}")
             # Still try to clean up references even if there was an error
             self._agent_executor = None
             self._tools = []
