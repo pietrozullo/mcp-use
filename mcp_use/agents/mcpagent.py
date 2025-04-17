@@ -5,7 +5,10 @@ This module provides the main MCPAgent class that integrates all components
 to provide a simple interface for using MCP tools with different LLMs.
 """
 
+import logging
+
 from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.globals import set_debug
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain.schema.language_model import BaseLanguageModel
@@ -23,6 +26,8 @@ from ..logging import logger
 from .prompts.system_prompt_builder import create_system_message
 from .prompts.templates import DEFAULT_SYSTEM_PROMPT_TEMPLATE, SERVER_MANAGER_SYSTEM_PROMPT_TEMPLATE
 from .server_manager import ServerManager
+
+set_debug(logger.level == logging.DEBUG)
 
 
 class MCPAgent:
@@ -64,6 +69,7 @@ class MCPAgent:
             disallowed_tools: List of tool names that should not be available to the agent.
             use_server_manager: Whether to use server manager mode instead of exposing all tools.
         """
+        logger.info("Hello boss")
         self.llm = llm
         self.client = client
         self.connectors = connectors or []
@@ -168,7 +174,6 @@ class MCPAgent:
             ]
             self._conversation_history = [self._system_message] + history_without_system
 
-
     def _create_agent(self) -> AgentExecutor:
         """Create the LangChain agent with the configured system message.
 
@@ -188,7 +193,6 @@ class MCPAgent:
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ]
-
         )
 
         tool_names = [tool.name for tool in self._tools]

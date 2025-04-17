@@ -9,6 +9,11 @@ import logging
 import os
 import sys
 
+from langchain.globals import set_debug as langchain_set_debug
+
+# Global debug flag - can be set programmatically or from environment
+MCP_USE_DEBUG = False
+
 
 class Logger:
     """Centralized logger for mcp_use.
@@ -45,7 +50,7 @@ class Logger:
     @classmethod
     def configure(
         cls,
-        level: int | str = logging.INFO,
+        level: int | str = None,
         format_str: str | None = None,
         log_to_console: bool = True,
         log_to_file: str | None = None,
@@ -53,16 +58,26 @@ class Logger:
         """Configure the root mcp_use logger.
 
         Args:
-            level: Log level (default: INFO)
+            level: Log level (default: DEBUG if MCP_USE_DEBUG is 2,
+            INFO if MCP_USE_DEBUG is 1,
+            otherwise WARNING)
             format_str: Log format string (default: DEFAULT_FORMAT)
             log_to_console: Whether to log to console (default: True)
             log_to_file: Path to log file (default: None)
         """
         root_logger = cls.get_logger()
 
-        # Set level
-        if isinstance(level, str):
+        # Set level based on debug settings if not explicitly provided
+        if level is None:
+            if MCP_USE_DEBUG == 2:
+                level = logging.DEBUG
+            elif MCP_USE_DEBUG == 1:
+                level = logging.INFO
+            else:
+                level = logging.WARNING
+        elif isinstance(level, str):
             level = getattr(logging, level.upper())
+
         root_logger.setLevel(level)
 
         # Clear existing handlers
@@ -89,6 +104,38 @@ class Logger:
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler)
 
+    @classmethod
+    def set_debug(cls, debug_level: int = 2) -> None:
+        """Set the debug flag and update the log level accordingly.
+
+        Args:
+            debug_level: Debug level (0=off, 1=info, 2=debug)
+        """
+        global MCP_USE_DEBUG
+        MCP_USE_DEBUG = debug_level
+
+        # Update log level for existing loggers
+        if debug_level == 2:
+            for logger in cls._loggers.values():
+                logger.setLevel(logging.DEBUG)
+                langchain_set_debug(True)
+        elif debug_level == 1:
+            for logger in cls._loggers.values():
+                logger.setLevel(logging.INFO)
+                langchain_set_debug(False)
+        else:
+            # Reset to default (WARNING)
+            for logger in cls._loggers.values():
+                logger.setLevel(logging.WARNING)
+                langchain_set_debug(False)
+
+
+# Check environment variable for debug flag
+debug_env = os.environ.get("DEBUG", "").lower()
+if debug_env == "2":
+    MCP_USE_DEBUG = 2
+elif debug_env == "1":
+    MCP_USE_DEBUG = 1
 
 # Configure default logger
 Logger.configure()
