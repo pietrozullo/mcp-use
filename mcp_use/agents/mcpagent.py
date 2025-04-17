@@ -69,7 +69,6 @@ class MCPAgent:
             disallowed_tools: List of tool names that should not be available to the agent.
             use_server_manager: Whether to use server manager mode instead of exposing all tools.
         """
-        logger.info("🤖 Initializing MCPAgent...")
         self.llm = llm
         self.client = client
         self.connectors = connectors or []
@@ -336,11 +335,9 @@ class MCPAgent:
         try:
             # Initialize if needed
             if manage_connector and not self._initialized:
-                logger.info("🔄 Initializing agent before running query...")
                 await self.initialize()
                 initialized_here = True
             elif not self._initialized and self.auto_initialize:
-                logger.info("🔄 Auto-initializing agent before running query...")
                 await self.initialize()
                 initialized_here = True
 
