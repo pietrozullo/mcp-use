@@ -58,32 +58,6 @@ HTTP connections communicate with MCP servers over standard HTTP/HTTPS protocols
 }
 ```
 
-## WebSocket (WS) Connections
-
-WebSocket connections provide a persistent, bidirectional communication channel between the client and server.
-
-### Characteristics:
-
-- **Real-time Communication**: Low-latency bidirectional data flow
-- **Persistent Connection**: Maintains connection state
-- **Efficiency**: Lower overhead for multiple interactions
-- **Event-Driven**: Well-suited for streaming and event-based operations
-
-### Configuration Example:
-
-```json
-{
-  "mcpServers": {
-    "ws_server": {
-      "url": "ws://localhost:3001",
-      "headers": {
-        "Authorization": "Bearer ${AUTH_TOKEN}"
-      }
-    }
-  }
-}
-```
-
 ## Choosing the Right Connection Type
 
 The choice of connection type depends on your specific use case:
@@ -91,8 +65,6 @@ The choice of connection type depends on your specific use case:
 1. **STDIO**: Best for local development, testing, and enhanced security scenarios where network exposure is a concern
 
 2. **HTTP**: Ideal for stateless operations, simple integrations, and when working with existing HTTP infrastructure
-
-3. **WebSocket**: Preferred for real-time applications, streaming data, and scenarios requiring persistent connections
 
 When configuring your mcp_use environment, you can specify the connection type in your configuration file as shown in the examples above.
 
@@ -111,7 +83,6 @@ For example:
 
 - If your configuration includes `command` and `args`, a STDIO connection will be used
 - If your configuration has a `url` starting with `http://` or `https://`, an HTTP connection will be used
-- If your configuration has a `url` starting with `ws://` or `wss://`, a WebSocket connection will be used
 
 This automatic inference simplifies the configuration process and ensures the appropriate connection type is used without requiring explicit specification.
 

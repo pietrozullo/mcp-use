@@ -19,7 +19,7 @@
           },
           {
             "group": "Essentials",
-            "pages": ["essentials/configuration", "essentials/llm-integration"]
+            "pages": ["essentials/configuration", "essentials/llm-integration", "essentials/debugging", "essentials/connection-types"]
           },
           {
             "group": "API Reference",

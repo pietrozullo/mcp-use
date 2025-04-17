@@ -1,0 +1,80 @@
+---
+title: 'Debugging'
+description: 'Learn how to debug and log in mcp-use'
+---
+
+# Debugging MCP-Use
+
+MCP-Use provides built-in debugging functionality that increases log verbosity and helps diagnose issues in your agent implementation.
+
+## Enabling Debug Mode
+
+There are two primary ways to enable debug mode:
+
+### 1. Environment Variable (Recommended for One-off Runs)
+
+Run your script with the `DEBUG` environment variable set to `1`:
+
+```bash
+DEBUG=1 python3.11 examples/browser_use.py
+```
+
+This sets the debug flag only for the duration of that specific Python process. This is particularly useful for quickly troubleshooting issues without modifying your code.
+
+### 2. Setting the Debug Flag Globally
+
+You can set the environment variable `MCP_USE_DEBUG` in your terminal to run mcp-use in debug mode:
+
+```bash
+export MCP_USE_DEBUG=1
+```
+
+## Agent-Specific Verbosity
+
+If you only want to increase verbosity for the agent component without enabling full debug mode for the entire package, you can use the `verbose` parameter when creating an MCPAgent:
+
+```python
+from mcp_use import MCPAgent
+
+# Create agent with increased verbosity
+agent = MCPAgent(
+    llm=your_llm,
+    client=your_client,
+    verbose=True  # Only shows debug messages from the agent
+)
+```
+
+This option is useful when you want to see the agent's steps and decision-making process without all the low-level debug information from other components.
+
+## Debug Information
+
+When debug mode is enabled, you'll see more detailed information about:
+
+- Server initialization and connection details
+- Tool registration and resolution
+- Agent steps and decision-making
+- Request and response formats
+- Communication with MCP servers
+- Error details and stack traces
+
+This can be extremely helpful when diagnosing issues with custom MCP servers or understanding why an agent might be behaving unexpectedly.
+
+## Langsmith
+
+Langchain offers a very nice tool to debug agent behaviour which integrates seamlessly with mcp-use. You can visit https://smith.langchain.com/ and login, they will give you a set of variables to copy in an .env file
+you will be then able to visualize the agent behaviour on their platform.
+
+
+## Troubleshooting Common Issues
+
+### Server Connection Problems
+
+If you're having issues connecting to MCP servers, enabling debug mode will show detailed information about the connection attempts, server initialization, and any errors encountered.
+
+### Agent Not Using Expected Tools
+
+When debug mode is enabled, you'll see each tool registration and the exact prompts being sent to the LLM, which can help diagnose why certain tools might not be used as expected.
+
+### Performance Issues
+
+Debug logs can help identify potential bottlenecks in your implementation by showing timing information for various operations.
