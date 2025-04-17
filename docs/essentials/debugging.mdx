@@ -13,21 +13,45 @@ There are two primary ways to enable debug mode:
 
 ### 1. Environment Variable (Recommended for One-off Runs)
 
-Run your script with the `DEBUG` environment variable set to `1`:
+Run your script with the `DEBUG` environment variable set to the desired level:
 
 ```bash
+# Level 1: Show INFO level messages
 DEBUG=1 python3.11 examples/browser_use.py
+
+# Level 2: Show DEBUG level messages (full verbose output)
+DEBUG=2 python3.11 examples/browser_use.py
 ```
 
-This sets the debug flag only for the duration of that specific Python process. This is particularly useful for quickly troubleshooting issues without modifying your code.
-
-### 2. Setting the Debug Flag Globally
-
-You can set the environment variable `MCP_USE_DEBUG` in your terminal to run mcp-use in debug mode:
-
+This sets the debug level only for the duration of that specific Python process. This is particularly useful for quickly troubleshooting issues without modifying your code.
+Alternatively you can set the environment variable MCP_USE_DEBUG as such:
 ```bash
-export MCP_USE_DEBUG=1
+export MCP_USE_DEBUG=1 # or 2
 ```
+
+### 2. Setting the Debug Flag Programmatically
+
+You can set the global debug flag directly in your code, which is useful for debugging specific parts of your application or conditionally enabling debug mode based on your application state:
+
+```python
+import mcp_use
+
+mcp_use.set_debug(1)  # INFO level
+# or
+mcp_use.set_debug(2)  # DEBUG level (full verbose output)
+# or
+mcp_use.set_debug(0)  # Turn off debug (WARNING level)
+```
+
+## Debug Levels
+
+MCP-Use supports different levels of debugging:
+
+| Level | Environment Variable | Program Setting | Description |
+|-------|---------------------|-----------------|-------------|
+| 0     | (not set)           | `set_debug(0)`  | Normal operation, only WARNING and above messages are shown |
+| 1     | `DEBUG=1`           | `set_debug(1)`  | INFO level messages are shown - useful for basic operational information. Shows tool calls.|
+| 2     | `DEBUG=2`           | `set_debug(2)`  | Full DEBUG level - all detailed debugging information is shown |
 
 ## Agent-Specific Verbosity
 
@@ -63,7 +87,6 @@ This can be extremely helpful when diagnosing issues with custom MCP servers or 
 
 Langchain offers a very nice tool to debug agent behaviour which integrates seamlessly with mcp-use. You can visit https://smith.langchain.com/ and login, they will give you a set of variables to copy in an .env file
 you will be then able to visualize the agent behaviour on their platform.
-
 
 ## Troubleshooting Common Issues
 
