@@ -464,6 +464,63 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+
+# Debugging
+
+MCP-Use provides a built-in debug mode that increases log verbosity and helps diagnose issues in your agent implementation.
+
+## Enabling Debug Mode
+
+There are two primary ways to enable debug mode:
+
+### 1. Environment Variable (Recommended for One-off Runs)
+
+Run your script with the `DEBUG` environment variable set to the desired level:
+
+```bash
+# Level 1: Show INFO level messages
+DEBUG=1 python3.11 examples/browser_use.py
+
+# Level 2: Show DEBUG level messages (full verbose output)
+DEBUG=2 python3.11 examples/browser_use.py
+```
+
+This sets the debug level only for the duration of that specific Python process.
+
+Alternatively you can set the following environment variable to the desired logging level:
+
+```bash
+export MCP_USE_DEBUG=1 # or 2
+```
+
+### 2. Setting the Debug Flag Programmatically
+
+You can set the global debug flag directly in your code:
+
+```python
+import mcp_use
+
+mcp_use.set_debug(1)  # INFO level
+# or
+mcp_use.set_debug(2)  # DEBUG level (full verbose output)
+```
+
+### 3. Agent-Specific Verbosity
+
+If you only want to see debug information from the agent without enabling full debug logging, you can set the `verbose` parameter when creating an MCPAgent:
+
+```python
+# Create agent with increased verbosity
+agent = MCPAgent(
+    llm=your_llm,
+    client=your_client,
+    verbose=True  # Only shows debug messages from the agent
+)
+```
+
+This is useful when you only need to see the agent's steps and decision-making process without all the low-level debug information from other components.
+
+
 # Roadmap
 
 <ul>
