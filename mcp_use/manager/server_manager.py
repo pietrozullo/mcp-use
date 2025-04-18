@@ -1,3 +1,5 @@
+import time
+
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
@@ -20,7 +22,7 @@ class DisconnectServerInput(BaseModel):
     pass
 
 
-class ListServersInput(BaseModel):
+class listServersInput(BaseModel):
     """Empty input for listing available servers"""
 
     pass
@@ -53,6 +55,12 @@ class ServerManager:
         self._server_tools: dict[str, list[BaseTool]] = {}
         self.tool_search = ToolSearch()
 
+        # Track when tools were last indexed to avoid redundant indexing
+        self._last_index_time: float = 0
+        self._indexed_tool_count: int = 0
+        self._indexed_server_names: set[str] = set()
+        self._index_in_progress: bool = False
+
     async def initialize(self) -> None:
         """Initialize the server manager and prepare server management tools."""
         # Make sure we have server configurations
@@ -61,11 +69,12 @@ class ServerManager:
 
         # Pre-fetch tools for all servers to populate the tool search index
         await self._prefetch_server_tools()
-        await self.tool_search.index_tools(self._server_tools)
 
     async def _prefetch_server_tools(self) -> None:
         """Pre-fetch tools for all servers to populate the tool search index."""
         servers = self.client.get_server_names()
+
+        tool_changes = False
         for server_name in servers:
             try:
                 # Only create session if needed, don't set active
@@ -91,32 +100,89 @@ class ServerManager:
                 if session:
                     connector = session.connector
                     tools = await self.adapter.create_langchain_tools([connector])
-                    self._server_tools[server_name] = tools  # Cache tools
-                    self.initialized_servers[server_name] = True  # Mark as initialized
-                    logger.debug(f"Prefetched {len(tools)} tools for server '{server_name}'.")
+
+                    # Check if this server's tools have changed
+                    if (
+                        server_name not in self._server_tools
+                        or self._server_tools[server_name] != tools
+                    ):
+                        self._server_tools[server_name] = tools  # Cache tools
+                        self.initialized_servers[server_name] = True  # Mark as initialized
+                        tool_changes = True
+                        logger.debug(f"Prefetched {len(tools)} tools for server '{server_name}'.")
+                    else:
+                        logger.debug(
+                            f"Tools for server '{server_name}' unchanged, using cached version."
+                        )
             except Exception as e:
                 logger.error(f"Error prefetching tools for server '{server_name}': {e}")
 
-        # Update the tool search index with all prefetched tools
-        self.tool_search.index_tools(self._server_tools)
-        logger.info(
-            f"Initialized tool search index with tools from {len(self._server_tools)} servers"
-        )
+        # Only update the index if tools have changed
+        if tool_changes:
+            await self._update_search_index()
+        else:
+            logger.info("No tool changes detected, search index remains current")
+
+    async def _update_search_index(self) -> None:
+        """Update the tool search index, avoiding redundant indexing."""
+        # If indexing is already in progress, don't start another index operation
+        if self._index_in_progress:
+            logger.debug("Tool indexing already in progress, skipping redundant indexing")
+            return
+
+        try:
+            # Set flag to prevent concurrent indexing
+            self._index_in_progress = True
+
+            # Calculate a signature of the current tool set
+            current_tool_count = sum(len(tools) for tools in self._server_tools.values())
+            current_server_names = set(self._server_tools.keys())
+
+            # Check if index needs to be updated
+            index_needs_update = (
+                current_tool_count != self._indexed_tool_count
+                or current_server_names != self._indexed_server_names
+                or (time.time() - self._last_index_time) > 3600  # Force reindex after 1 hour
+            )
+
+            if index_needs_update:
+                logger.info(
+                    f"Updating tool search index with tools from {len(self._server_tools)} servers"
+                )
+                await self.tool_search.index_tools(self._server_tools)
+
+                # Update tracking info
+                self._last_index_time = time.time()
+                self._indexed_tool_count = current_tool_count
+                self._indexed_server_names = current_server_names
+
+                # Get stats for logging
+                stats = self.tool_search.get_stats()
+                logger.info(
+                    f"Tool search index updated with {stats['indexed_tools']} tools "
+                    f"in {stats['index_build_time']:.2f}s"
+                )
+            else:
+                logger.debug("Tool search index is up to date, skipping reindexing")
+
+        finally:
+            # Clear flag when done
+            self._index_in_progress = False
 
     async def get_server_management_tools(self) -> list[BaseTool]:
         """Get tools for managing server connections.
 
         Returns:
-            List of LangChain tools for server management
+            list of LangChain tools for server management
         """
         # Create structured tools for server management with direct parameter passing
         list_servers_tool = StructuredTool.from_function(
             coroutine=self.list_servers,
             name="list_mcp_servers",
-            description="Lists all available MCP (Model Context Protocol) servers that can be "
+            description="lists all available MCP (Model Context Protocol) servers that can be "
             "connected to, along with the tools available on each server. "
             "Use this tool to discover servers and see what functionalities they offer.",
-            args_schema=ListServersInput,
+            args_schema=listServersInput,
         )
 
         connect_server_tool = StructuredTool.from_function(
@@ -146,8 +212,9 @@ class ServerManager:
             coroutine=self.search_tools,
             name="search_mcp_tools",
             description="Search for relevant tools across all MCP servers using semantic search. "
-            "Provide a description of what tool you think you might need to be able to perform the"
-            "task you are assigned. ",
+            "Provide a description of the tool you think you might need to be able to perform the"
+            "task you are assigned."
+            "It is important you search for the tool, not for the goal.",
             args_schema=ToolSearchInput,
         )
 
@@ -160,7 +227,7 @@ class ServerManager:
         ]
 
     async def list_servers(self) -> str:
-        """List all available MCP servers along with their available tools.
+        """list all available MCP servers along with their available tools.
 
         Returns:
             String listing all available servers and their tools.
@@ -207,13 +274,41 @@ class ServerManager:
                             tools = fetched_tools
                             logger.debug(f"Fetched {len(tools)} tools for server '{server_name}'.")
 
-                            # Update the tool search index with the new tools
-                            self.tool_search.index_tools(self._server_tools)
+                            # Check if tools have changed
+                            if (
+                                server_name not in self._server_tools
+                                or self._server_tools[server_name] != fetched_tools
+                            ):
+                                self._server_tools[server_name] = fetched_tools  # Cache tools
+                                self.initialized_servers[server_name] = True  # Mark as initialized
+                                tools = fetched_tools
+                                logger.debug(
+                                    f"Fetched {len(tools)} tools for server '{server_name}'."
+                                )
+
+                                # Update the tool search index with the new tools
+                                await self._update_search_index()
+                            else:
+                                tools = fetched_tools
+                                logger.debug(f"Tools for server '{server_name}' unchanged.")
+
                         except Exception as e:
                             logger.warning(f"Could not fetch tools for server '{server_name}': {e}")
 
             except Exception as e:
                 logger.error(f"Unexpected error listing tools for server '{server_name}': {e}")
+
+            # Add tool information to the result
+            if tools:
+                result += f"   Tools: {len(tools)} available\n"
+                # Optionally list some tool names
+                sample_tools = [tool.name for tool in tools[:3]]
+                if sample_tools:
+                    result += f"   Sample tools: {', '.join(sample_tools)}"
+                    if len(tools) > 3:
+                        result += f" and {len(tools) - 3} more\n"
+                    else:
+                        result += "\n"
 
         return result
 
@@ -249,15 +344,18 @@ class ServerManager:
             self.active_server = server_name
 
             # Initialize server tools if not already initialized
+            tool_changes = False
             if server_name not in self._server_tools:
                 connector = session.connector
                 self._server_tools[server_name] = await self.adapter._create_tools_from_connectors(
                     [connector]
                 )
                 self.initialized_servers[server_name] = True
+                tool_changes = True
 
-                # Update the tool search index with the new tools
-                self.tool_search.index_tools(self._server_tools)
+                # Only update the search index if we have new tools
+                if tool_changes:
+                    await self._update_search_index()
 
             server_tools = self._server_tools.get(server_name, [])
             num_tools = len(server_tools)
@@ -317,7 +415,7 @@ class ServerManager:
         """Get the tools for the currently active server.
 
         Returns:
-            List of LangChain tools for the active server or empty list if no active server
+            list of LangChain tools for the active server or empty list if no active server
         """
         if not self.active_server:
             return []
@@ -334,12 +432,13 @@ class ServerManager:
         active_server_tools = await self.get_active_server_tools()
         return management_tools + active_server_tools
 
-    async def search_tools(self, query: str, top_k: int = 5) -> str:
+    async def search_tools(self, query: str, top_k: int = 5, use_fast_search: bool = True) -> str:
         """Search for tools across all MCP servers using semantic search.
 
         Args:
             query: The search query to find relevant tools
             top_k: Number of top results to return
+            use_fast_search: Whether to use fast keyword search instead of semantic search
 
         Returns:
             String with formatted search results
@@ -349,12 +448,28 @@ class ServerManager:
             logger.info("No tools found in index, attempting to prefetch server tools")
             await self._prefetch_server_tools()
 
-        # Just log that we're using the existing index, no need to re-index
-        logger.info(f"Using tool search index with {len(self._server_tools)} servers")
+        # Use hybrid search for better results
+        search_method = "hybrid"
+        if use_fast_search:
+            search_method = "keyword"
 
-        # Perform the search with fast search by default
-        results = self.tool_search.search(query, top_k, use_fast_search=True)
-        print(results)
+        # Log search attempt with tool index stats
+        tool_count = sum(len(tools) for tools in self._server_tools.values())
+        logger.info(
+            f"Searching {tool_count} tools with query: '{query}' using {search_method} search"
+        )
+
+        # Choose the search method: hybrid (both), keyword, or semantic
+        if search_method == "hybrid" and hasattr(self.tool_search, "hybrid_search"):
+            results = self.tool_search.hybrid_search(query, top_k=top_k)
+            search_type = "hybrid keyword and semantic"
+        elif use_fast_search:
+            results = self.tool_search.search(query, top_k=top_k, use_fast_search=True)
+            search_type = "fast keyword"
+        else:
+            results = self.tool_search.search(query, top_k=top_k, use_fast_search=False)
+            search_type = "semantic"
+
         if not results:
             logger.warning(f"No tool search results found for query: '{query}'")
             # Get list of all available tools to help with debugging
@@ -366,7 +481,7 @@ class ServerManager:
             if available_tools:
                 logger.info(f"Available tools that could be indexed: {available_tools}")
                 return (
-                    "No relevant tools found. Try describing your task more specifically."
+                    "No relevant tools found. Try describing your task more specifically. "
                     f"Available tools: {', '.join(available_tools[:10])}"
                     + (
                         f"... and {len(available_tools) - 10} more"
@@ -381,7 +496,7 @@ class ServerManager:
                 )
 
         # Format the results
-        response = f"Top {len(results)} tools matching '{query}' (using fast keyword search):\n\n"
+        response = f"Top {len(results)} tools matching '{query}' (using {search_type} search):\n\n"
 
         for i, (tool, server_name, score) in enumerate(results):
             score_percent = f"{score * 100:.1f}%"
@@ -394,8 +509,8 @@ class ServerManager:
 
         if not self.active_server:
             response += (
-                "\nNote: To use any of these tools, first connect to their ser"
-                "ver using connect_to_mcp_server."
+                "\nNote: To use any of these tools, first connect to their "
+                "server using connect_to_mcp_server."
             )
         elif any(server != self.active_server for _, server, _ in results):
             response += (
