@@ -5,6 +5,7 @@ from mcp_use.client import MCPClient
 from mcp_use.logging import logger
 
 from ..adapters.langchain_adapter import LangChainAdapter
+from .tool_search import ToolSearch, ToolSearchInput
 
 
 class ServerActionInput(BaseModel):
@@ -50,12 +51,57 @@ class ServerManager:
         self.active_server: str | None = None
         self.initialized_servers: dict[str, bool] = {}
         self._server_tools: dict[str, list[BaseTool]] = {}
+        self.tool_search = ToolSearch()
 
     async def initialize(self) -> None:
         """Initialize the server manager and prepare server management tools."""
         # Make sure we have server configurations
         if not self.client.get_server_names():
             logger.warning("No MCP servers defined in client configuration")
+
+        # Pre-fetch tools for all servers to populate the tool search index
+        await self._prefetch_server_tools()
+        await self.tool_search.index_tools(self._server_tools)
+
+    async def _prefetch_server_tools(self) -> None:
+        """Pre-fetch tools for all servers to populate the tool search index."""
+        servers = self.client.get_server_names()
+        for server_name in servers:
+            try:
+                # Only create session if needed, don't set active
+                session = None
+                try:
+                    session = self.client.get_session(server_name)
+                    logger.debug(
+                        f"Using existing session for server '{server_name}' to prefetch tools."
+                    )
+                except ValueError:
+                    try:
+                        session = await self.client.create_session(server_name)
+                        logger.debug(
+                            f"Temporarily created session for '{server_name}' to prefetch tools"
+                        )
+                    except Exception:
+                        logger.warning(
+                            f"Could not create session for '{server_name}' during prefetch"
+                        )
+                        continue
+
+                # Fetch tools if session is available
+                if session:
+                    connector = session.connector
+                    tools = await self.adapter.create_langchain_tools([connector])
+                    self._server_tools[server_name] = tools  # Cache tools
+                    self.initialized_servers[server_name] = True  # Mark as initialized
+                    logger.debug(f"Prefetched {len(tools)} tools for server '{server_name}'.")
+            except Exception as e:
+                logger.error(f"Error prefetching tools for server '{server_name}': {e}")
+
+        # Update the tool search index with all prefetched tools
+        self.tool_search.index_tools(self._server_tools)
+        logger.info(
+            f"Initialized tool search index with tools from {len(self._server_tools)} servers"
+        )
 
     async def get_server_management_tools(self) -> list[BaseTool]:
         """Get tools for managing server connections.
@@ -96,11 +142,21 @@ class ServerManager:
             args_schema=DisconnectServerInput,
         )
 
+        search_tools_tool = StructuredTool.from_function(
+            coroutine=self.search_tools,
+            name="search_mcp_tools",
+            description="Search for relevant tools across all MCP servers using semantic search. "
+            "Provide a description of what tool you think you might need to be able to perform the"
+            "task you are assigned. ",
+            args_schema=ToolSearchInput,
+        )
+
         return [
             list_servers_tool,
             connect_server_tool,
             get_active_server_tool,
             disconnect_server_tool,
+            search_tools_tool,
         ]
 
     async def list_servers(self) -> str:
@@ -150,20 +206,14 @@ class ServerManager:
                             self.initialized_servers[server_name] = True  # Mark as initialized
                             tools = fetched_tools
                             logger.debug(f"Fetched {len(tools)} tools for server '{server_name}'.")
+
+                            # Update the tool search index with the new tools
+                            self.tool_search.index_tools(self._server_tools)
                         except Exception as e:
                             logger.warning(f"Could not fetch tools for server '{server_name}': {e}")
-                            # Keep tools as empty list if fetching failed
-
-                # Append tool names to the result string
-                if tools:
-                    tool_names = ", ".join([tool.name for tool in tools])
-                    result += f"   Tools: {tool_names}\n"
-                else:
-                    result += "   Tools: (Could not retrieve or none available)\n"
 
             except Exception as e:
                 logger.error(f"Unexpected error listing tools for server '{server_name}': {e}")
-                result += "   Tools: (Error retrieving tools)\n"
 
         return result
 
@@ -205,6 +255,9 @@ class ServerManager:
                     [connector]
                 )
                 self.initialized_servers[server_name] = True
+
+                # Update the tool search index with the new tools
+                self.tool_search.index_tools(self._server_tools)
 
             server_tools = self._server_tools.get(server_name, [])
             num_tools = len(server_tools)
@@ -280,3 +333,74 @@ class ServerManager:
         management_tools = await self.get_server_management_tools()
         active_server_tools = await self.get_active_server_tools()
         return management_tools + active_server_tools
+
+    async def search_tools(self, query: str, top_k: int = 5) -> str:
+        """Search for tools across all MCP servers using semantic search.
+
+        Args:
+            query: The search query to find relevant tools
+            top_k: Number of top results to return
+
+        Returns:
+            String with formatted search results
+        """
+        # If we have no tools indexed, try to prefetch them
+        if not self._server_tools:
+            logger.info("No tools found in index, attempting to prefetch server tools")
+            await self._prefetch_server_tools()
+
+        # Just log that we're using the existing index, no need to re-index
+        logger.info(f"Using tool search index with {len(self._server_tools)} servers")
+
+        # Perform the search with fast search by default
+        results = self.tool_search.search(query, top_k, use_fast_search=True)
+        print(results)
+        if not results:
+            logger.warning(f"No tool search results found for query: '{query}'")
+            # Get list of all available tools to help with debugging
+            available_tools = []
+            for server_name, tools in self._server_tools.items():
+                for tool in tools:
+                    available_tools.append(f"{tool.name} ({server_name})")
+
+            if available_tools:
+                logger.info(f"Available tools that could be indexed: {available_tools}")
+                return (
+                    "No relevant tools found. Try describing your task more specifically."
+                    f"Available tools: {', '.join(available_tools[:10])}"
+                    + (
+                        f"... and {len(available_tools) - 10} more"
+                        if len(available_tools) > 10
+                        else ""
+                    )
+                )
+            else:
+                return (
+                    "No relevant tools found. No tools are available"
+                    " from any servers. Try connecting to a server first."
+                )
+
+        # Format the results
+        response = f"Top {len(results)} tools matching '{query}' (using fast keyword search):\n\n"
+
+        for i, (tool, server_name, score) in enumerate(results):
+            score_percent = f"{score * 100:.1f}%"
+            active_marker = " (ACTIVE)" if server_name == self.active_server else ""
+            response += (
+                f"{i + 1}. Tool: {tool.name} (Relevance: {score_percent})\n"
+                f"   Server: {server_name}{active_marker}\n"
+                f"   Description: {tool.description}\n\n"
+            )
+
+        if not self.active_server:
+            response += (
+                "\nNote: To use any of these tools, first connect to their ser"
+                "ver using connect_to_mcp_server."
+            )
+        elif any(server != self.active_server for _, server, _ in results):
+            response += (
+                "\nNote: Some tools are on different servers than the active one. "
+                "Connect to the appropriate server to use them."
+            )
+
+        return response
