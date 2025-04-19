@@ -152,7 +152,7 @@ class MCPAgent:
 
             # Create LangChain tools using the adapter
             # (adapter will handle initialization if needed)
-            self._tools = await self.adapter.create_langchain_tools(connectors_to_use)
+            self._tools = await self.adapter.create_tools(connectors_to_use)
             logger.info(f"🛠️ Created {len(self._tools)} LangChain tools")
 
         # Create the agent
