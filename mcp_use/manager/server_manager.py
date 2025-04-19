@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 from langchain_core.tools import BaseTool, StructuredTool
@@ -61,6 +62,9 @@ class ServerManager:
         self._indexed_server_names: set[str] = set()
         self._index_in_progress: bool = False
 
+        # Task to track background indexing
+        self._indexing_task = None
+
     async def initialize(self) -> None:
         """Initialize the server manager and prepare server management tools."""
         # Make sure we have server configurations
@@ -119,9 +123,26 @@ class ServerManager:
 
         # Only update the index if tools have changed
         if tool_changes:
-            await self._update_search_index()
+            # Start indexing in the background
+            self._start_background_indexing()
         else:
             logger.info("No tool changes detected, search index remains current")
+
+    def _start_background_indexing(self) -> None:
+        """Start the index update process in the background."""
+        if self._indexing_task is not None and not self._indexing_task.done():
+            logger.debug("Indexing task already running")
+            return
+
+        self._indexing_task = asyncio.create_task(self._update_search_index())
+        logger.debug("Started background indexing task")
+
+    async def wait_for_index_update(self) -> None:
+        """Wait for any ongoing index update to complete."""
+        if self._indexing_task is not None and not self._indexing_task.done():
+            logger.debug("Waiting for index update to complete...")
+            await self._indexing_task
+            logger.debug("Index update completed")
 
     async def _update_search_index(self) -> None:
         """Update the tool search index, avoiding redundant indexing."""
@@ -211,10 +232,14 @@ class ServerManager:
         search_tools_tool = StructuredTool.from_function(
             coroutine=self.search_tools,
             name="search_mcp_tools",
-            description="Search for relevant tools across all MCP servers using semantic search. "
-            "Provide a description of the tool you think you might need to be able to perform the"
-            "task you are assigned."
-            "It is important you search for the tool, not for the goal.",
+            description=(
+                "Search for relevant tools across all MCP servers using semantic search. "
+                "Provide a description of the tool you think you might need to be able to perform "
+                "the task you are assigned. Do not be too specific, the search will give you many"
+                " options. It is important you search for the tool, not for the goal."
+                "If your first search doesn't yield relevant results, try using different keywords "
+                "or more general terms."
+            ),
             args_schema=ToolSearchInput,
         )
 
@@ -355,7 +380,7 @@ class ServerManager:
 
                 # Only update the search index if we have new tools
                 if tool_changes:
-                    await self._update_search_index()
+                    self._start_background_indexing()
 
             server_tools = self._server_tools.get(server_name, [])
             num_tools = len(server_tools)
@@ -432,7 +457,7 @@ class ServerManager:
         active_server_tools = await self.get_active_server_tools()
         return management_tools + active_server_tools
 
-    async def search_tools(self, query: str, top_k: int = 5, use_fast_search: bool = True) -> str:
+    async def search_tools(self, query: str, top_k: int = 100) -> str:
         """Search for tools across all MCP servers using semantic search.
 
         Args:
@@ -447,11 +472,10 @@ class ServerManager:
         if not self._server_tools:
             logger.info("No tools found in index, attempting to prefetch server tools")
             await self._prefetch_server_tools()
+        # Wait for any ongoing indexing to complete since we need the index now
+        await self.wait_for_index_update()
 
-        # Use hybrid search for better results
         search_method = "hybrid"
-        if use_fast_search:
-            search_method = "keyword"
 
         # Log search attempt with tool index stats
         tool_count = sum(len(tools) for tools in self._server_tools.values())
@@ -459,44 +483,18 @@ class ServerManager:
             f"Searching {tool_count} tools with query: '{query}' using {search_method} search"
         )
 
-        # Choose the search method: hybrid (both), keyword, or semantic
-        if search_method == "hybrid" and hasattr(self.tool_search, "hybrid_search"):
-            results = self.tool_search.hybrid_search(query, top_k=top_k)
-            search_type = "hybrid keyword and semantic"
-        elif use_fast_search:
-            results = self.tool_search.search(query, top_k=top_k, use_fast_search=True)
-            search_type = "fast keyword"
-        else:
-            results = self.tool_search.search(query, top_k=top_k, use_fast_search=False)
-            search_type = "semantic"
-
+        results = self.tool_search.search(query, top_k=top_k)
         if not results:
             logger.warning(f"No tool search results found for query: '{query}'")
-            # Get list of all available tools to help with debugging
-            available_tools = []
-            for server_name, tools in self._server_tools.items():
-                for tool in tools:
-                    available_tools.append(f"{tool.name} ({server_name})")
-
-            if available_tools:
-                logger.info(f"Available tools that could be indexed: {available_tools}")
-                return (
-                    "No relevant tools found. Try describing your task more specifically. "
-                    f"Available tools: {', '.join(available_tools[:10])}"
-                    + (
-                        f"... and {len(available_tools) - 10} more"
-                        if len(available_tools) > 10
-                        else ""
-                    )
-                )
-            else:
-                return (
-                    "No relevant tools found. No tools are available"
-                    " from any servers. Try connecting to a server first."
-                )
+            return (
+                "No relevant tools found. The search provided no results"
+                " You can also try searching again with different keywords."
+                " Try using more general terms or focusing on the capability you need rather than"
+                "specific implementation details."
+            )
 
         # Format the results
-        response = f"Top {len(results)} tools matching '{query}' (using {search_type} search):\n\n"
+        response = f"Top {len(results)} tools matching '{query}'\n\n"
 
         for i, (tool, server_name, score) in enumerate(results):
             score_percent = f"{score * 100:.1f}%"
@@ -507,15 +505,8 @@ class ServerManager:
                 f"   Description: {tool.description}\n\n"
             )
 
-        if not self.active_server:
-            response += (
-                "\nNote: To use any of these tools, first connect to their "
-                "server using connect_to_mcp_server."
-            )
-        elif any(server != self.active_server for _, server, _ in results):
-            response += (
-                "\nNote: Some tools are on different servers than the active one. "
-                "Connect to the appropriate server to use them."
-            )
+        response += "\nIf these tools don't match what you're looking for, try searching again with"
+        " different keywords. Consider trying broader terms (e.g., 'image' instead of 'resize image"
+        "') or focusing on the core functionality needed."
 
         return response
