@@ -7,6 +7,7 @@ This module provides the abstract base class that all MCP tool adapters should i
 from abc import ABC, abstractmethod
 from typing import Any, TypeVar
 
+from ..client import MCPClient
 from ..connectors.base import BaseConnector
 from ..logging import logger
 
@@ -29,6 +30,48 @@ class BaseAdapter(ABC):
         """
         self.disallowed_tools = disallowed_tools or []
         self._connector_tool_map: dict[BaseConnector, list[T]] = {}
+
+    @classmethod
+    async def create_tools(
+        cls, client: "MCPClient", disallowed_tools: list[str] | None = None
+    ) -> list[T]:
+        """Create tools from an MCPClient instance.
+
+        This is the recommended way to create tools from an MCPClient, as it handles
+        session creation and connector extraction automatically.
+
+        Args:
+            client: The MCPClient to extract tools from.
+            disallowed_tools: Optional list of tool names to exclude.
+
+        Returns:
+            A list of tools in the target framework's format.
+
+        Example:
+            ```python
+            from mcp_use.client import MCPClient
+            from mcp_use.adapters import YourAdapter
+
+            client = MCPClient.from_config_file("config.json")
+            tools = await YourAdapter.create_tools(client)
+            ```
+        """
+        # Create the adapter
+        adapter = cls(disallowed_tools=disallowed_tools)
+
+        # Ensure we have active sessions
+        if not client.active_sessions:
+            logger.info("No active sessions found, creating new ones...")
+            await client.create_all_sessions()
+
+        # Get all active sessions
+        sessions = client.get_all_active_sessions()
+
+        # Extract connectors from sessions
+        connectors = [session.connector for session in sessions.values()]
+
+        # Create tools from connectors
+        return await adapter._create_tools_from_connectors(connectors)
 
     async def load_tools_for_connector(self, connector: BaseConnector) -> list[T]:
         """Dynamically load tools for a specific connector.
@@ -85,7 +128,7 @@ class BaseAdapter(ABC):
         """
         pass
 
-    async def create_tools(self, connectors: list[BaseConnector]) -> list[T]:
+    async def _create_tools_from_connectors(self, connectors: list[BaseConnector]) -> list[T]:
         """Create tools from MCP tools in all provided connectors.
 
         Args:

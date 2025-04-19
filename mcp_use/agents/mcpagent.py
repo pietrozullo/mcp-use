@@ -134,7 +134,10 @@ class MCPAgent:
                     logger.info("🔄 No active sessions found, creating new ones...")
                     self._sessions = await self.client.create_all_sessions()
                     logger.info(f"✅ Created {len(self._sessions)} new sessions")
-                connectors_to_use = [session.connector for session in self._sessions.values()]
+
+                # Create LangChain tools directly from the client using the adapter
+                self._tools = await self.adapter.create_tools(self.client)
+                logger.info(f"🛠️ Created {len(self._tools)} LangChain tools from client")
             else:
                 # Using direct connector - only establish connection
                 # LangChainAdapter will handle initialization
@@ -144,16 +147,16 @@ class MCPAgent:
                     if not hasattr(connector, "client") or connector.client is None:
                         await connector.connect()
 
-            tools = [tool for connector in connectors_to_use for tool in connector.tools]
-            logger.info(f"🧰 Found {len(tools)} tools across all connectors")
+                # Create LangChain tools using the adapter with connectors
+                self._tools = await self.adapter._create_tools_from_connectors(connectors_to_use)
+                logger.info(f"🛠️ Created {len(self._tools)} LangChain tools from connectors")
+
+            # Get all tools for system message generation
+            all_tools = self._tools
+            logger.info(f"🧰 Found {len(all_tools)} tools across all connectors")
 
             # Create the system message based on available tools
-            await self._create_system_message_from_tools(tools)
-
-            # Create LangChain tools using the adapter
-            # (adapter will handle initialization if needed)
-            self._tools = await self.adapter.create_tools(connectors_to_use)
-            logger.info(f"🛠️ Created {len(self._tools)} LangChain tools")
+            await self._create_system_message_from_tools(all_tools)
 
         # Create the agent
         self._agent_executor = self._create_agent()
@@ -502,7 +505,7 @@ class MCPAgent:
             self._tools = []
 
             # If using client with session, close the session through client
-            if self.client and self._sessions:
+            if self.client:
                 logger.info("🔄 Closing sessions through client")
                 await self.client.close_all_sessions()
                 self._sessions = {}
@@ -511,6 +514,10 @@ class MCPAgent:
                 for connector in self.connectors:
                     logger.info("🔄 Disconnecting connector")
                     await connector.disconnect()
+
+            # Clear adapter tool cache
+            if hasattr(self.adapter, "_connector_tool_map"):
+                self.adapter._connector_tool_map = {}
 
             self._initialized = False
             logger.info("👋 Agent closed successfully")

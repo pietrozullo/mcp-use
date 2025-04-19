@@ -143,7 +143,9 @@ class ServerManager:
                     if session:
                         try:
                             connector = session.connector
-                            fetched_tools = await self.adapter.create_langchain_tools([connector])
+                            fetched_tools = await self.adapter._create_tools_from_connectors(
+                                [connector]
+                            )
                             self._server_tools[server_name] = fetched_tools  # Cache tools
                             self.initialized_servers[server_name] = True  # Mark as initialized
                             tools = fetched_tools
@@ -199,7 +201,7 @@ class ServerManager:
             # Initialize server tools if not already initialized
             if server_name not in self._server_tools:
                 connector = session.connector
-                self._server_tools[server_name] = await self.adapter.create_langchain_tools(
+                self._server_tools[server_name] = await self.adapter._create_tools_from_connectors(
                     [connector]
                 )
                 self.initialized_servers[server_name] = True
