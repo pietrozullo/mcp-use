@@ -121,6 +121,54 @@ Example configuration file (`browser_mcp.json`):
 }
 ```
 
+## Working with Adapters Directly
+
+If you want more control over how tools are created, you can work with the adapters directly. The `BaseAdapter` class provides a unified interface for converting MCP tools to various framework formats, with `LangChainAdapter` being the most commonly used implementation.
+
+```python
+import asyncio
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from mcp_use.client import MCPClient
+from mcp_use.adapters import LangChainAdapter
+
+async def main():
+    # Initialize client
+    client = MCPClient.from_config_file("browser_mcp.json")
+
+    # Create an adapter instance
+    adapter = LangChainAdapter()
+
+    # Get tools directly from the client
+    tools = await adapter.create_tools(client)
+
+    # Use the tools with any LangChain agent
+    llm = ChatOpenAI(model="gpt-4o")
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant with access to powerful tools."),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+
+    agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+    result = await agent_executor.ainvoke({"input": "Search for information about climate change"})
+    print(result["output"])
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+The adapter pattern makes it easy to:
+
+1. Create tools directly from an MCPClient
+2. Filter or customize which tools are available
+3. Integrate with different agent frameworks
+
 ## Using Multiple Servers
 
 The `MCPClient` can be configured with multiple MCP servers, allowing your agent to access tools from different sources. This capability enables complex workflows spanning various domains (e.g., web browsing and API interaction).

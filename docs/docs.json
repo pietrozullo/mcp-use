@@ -15,19 +15,32 @@
         "groups": [
           {
             "group": "Getting Started",
-            "pages": ["introduction", "quickstart"]
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
           },
           {
             "group": "Essentials",
-            "pages": ["essentials/configuration", "essentials/llm-integration", "essentials/debugging", "essentials/connection-types"]
+            "pages": [
+              "essentials/configuration",
+              "essentials/llm-integration",
+              "essentials/debugging",
+              "essentials/connection-types",
+              "building-custom-agents"
+            ]
           },
           {
             "group": "API Reference",
-            "pages": ["api-reference/introduction"]
+            "pages": [
+              "api-reference/introduction"
+            ]
           },
           {
             "group": "Development",
-            "pages": ["development"]
+            "pages": [
+              "development"
+            ]
           }
         ]
       }

@@ -1,0 +1,175 @@
+---
+title: Building Custom Agents
+description: Learn how to build custom agents using MCPClient and integrate tools with different agent frameworks
+---
+
+# Building Custom Agents
+
+MCP-Use provides flexible options for building custom agents that can utilize MCP tools. This guide will show you how to create your own agents by leveraging the existing adapters, particularly focusing on the LangChain adapter.
+
+## Overview
+
+MCP-Use allows you to:
+
+1. Access powerful tools from MCP through connectors
+2. Convert those tools to different frameworks using adapters
+3. Build custom agents that utilize these tools
+
+While MCP-Use provides a built-in `MCPAgent` class, you may want to create your own custom agent implementation for more flexibility or to integrate with other frameworks.
+
+## Using the LangChain Adapter
+
+The `LangChainAdapter` is a powerful component that converts MCP tools to LangChain tools, enabling you to use MCP tools with any LangChain-compatible agent.
+
+### Basic Example
+
+Here's a simple example of creating a custom agent using the LangChain adapter with the simplified API:
+
+```python
+import asyncio
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from mcp_use.client import MCPClient
+from mcp_use.adapters import LangChainAdapter
+
+async def main():
+    # Initialize the MCP client
+    client = MCPClient.from_config_file("path/to/config.json")
+
+    # Create adapter instance
+    adapter = LangChainAdapter()
+
+    # Get LangChain tools directly from the client with a single line
+    tools = await adapter.create_tools(client)
+
+    # Initialize your language model
+    llm = ChatOpenAI(model="gpt-4o")
+
+    # Create a prompt template
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant with access to powerful tools."),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+
+    # Create the agent
+    agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
+
+    # Create the agent executor
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+    # Run the agent
+    result = await agent_executor.ainvoke({"input": "What can you do?"})
+    print(result["output"])
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Note how the API simplifies tool creation - all you need is to create an adapter instance and call its `create_tools` method:
+```python
+adapter = LangChainAdapter()
+tools = await adapter.create_tools(client)
+```
+
+You don't need to worry about sessions, connectors, or initialization. The adapter handles everything for you.
+
+## Contributing New Adapters
+
+MCP-Use welcomes contributions for integrating with different agent frameworks. The adapter architecture is designed to make this process straightforward.
+
+### Adapter Architecture
+
+MCP-Use provides a `BaseAdapter` abstract class that handles most of the common functionality:
+- Managing tool caching
+- Loading tools from connectors
+- Handling connector initialization
+- Iterating through tools from multiple connectors
+
+To create an adapter for a new framework, you only need to implement one required method:
+
+- `_convert_tool`: Convert a single MCP tool to your framework's tool format
+
+### Creating a New Adapter
+
+Here's a simple template for creating a new adapter:
+
+```python
+from typing import Any
+
+from mcp_use.adapters.base import BaseAdapter
+from mcp_use.connectors.base import BaseConnector
+from your_framework import YourFrameworkTool  # Import your framework's tool class
+
+class YourFrameworkAdapter(BaseAdapter):
+    """Adapter for converting MCP tools to YourFramework tools."""
+
+    def _convert_tool(self, mcp_tool: dict[str, Any], connector: BaseConnector) -> YourFrameworkTool:
+        """Convert an MCP tool to your framework's tool format.
+
+        Args:
+            mcp_tool: The MCP tool to convert.
+            connector: The connector that provides this tool.
+
+        Returns:
+            A tool in your framework's format, or None if conversion failed.
+        """
+        try:
+            # Implement your framework-specific conversion logic
+            converted_tool = YourFrameworkTool(
+                name=mcp_tool.name,
+                description=mcp_tool.description,
+                # Map the MCP tool properties to your framework's tool properties
+                # You might need custom handling for argument schemas, function execution, etc.
+            )
+
+            return converted_tool
+        except Exception as e:
+            self.logger.error(f"Error converting tool {mcp_tool.name}: {e}")
+            return None
+```
+
+### Using Your Custom Adapter
+
+Once you've implemented your adapter, you can use it with the simplified API:
+
+```python
+from your_module import YourFrameworkAdapter
+from mcp_use.client import MCPClient
+
+# Initialize the client
+client = MCPClient.from_config_file("config.json")
+
+# Create an adapter instance
+adapter = YourFrameworkAdapter()
+
+# Get tools with a single line
+tools = await adapter.create_tools(client)
+
+# Use the tools with your framework
+agent = your_framework.create_agent(tools=tools)
+```
+
+### Tips for Implementing an Adapter
+
+1. **Schema Conversion**: Most frameworks have their own way of handling argument schemas. You'll need to convert the MCP tool's JSON Schema to your framework's format.
+
+2. **Tool Execution**: When a tool is called in your framework, you'll need to pass the call to the connector's `call_tool` method and handle the result.
+
+3. **Result Parsing**: MCP tools return structured data with types like text, images, or embedded resources. Your adapter should parse these into a format your framework understands.
+
+4. **Error Handling**: Ensure your adapter handles errors gracefully, both during tool conversion and execution.
+
+
+## Conclusion
+
+Building custom agents with MCP-Use offers tremendous flexibility while leveraging the power of MCP tools. By combining different connectors and adapters, you can create specialized agents tailored to specific tasks or integrate MCP capabilities into existing agent frameworks.
+
+The adapter architecture makes it easy to extend MCP-Use to support new frameworks - you just need to implement the `_convert_tool` method to bridge between MCP tools and your framework of choice.
+
+With the simplified API, you can create tools for your framework directly from an MCPClient by instantiating the appropriate adapter and calling its `create_tools` method, hiding all the complexity of session and connector management.
+
+We welcome contributions to expand the adapter ecosystem - if you develop an adapter for a new framework, please consider contributing it back to the project!
