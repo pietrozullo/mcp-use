@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from mcp_use.client import MCPClient
 from mcp_use.logging import logger
 
-from ..adapters.langchain_adapter import LangChainAdapter
+from ..adapters.base import BaseAdapter
 from .tool_search import ToolSearch, ToolSearchInput
 
 
@@ -42,7 +42,7 @@ class ServerManager:
     dynamically activating the tools for the selected server.
     """
 
-    def __init__(self, client: MCPClient, adapter: LangChainAdapter) -> None:
+    def __init__(self, client: MCPClient, adapter: BaseAdapter) -> None:
         """Initialize the server manager.
 
         Args:
@@ -103,7 +103,7 @@ class ServerManager:
                 # Fetch tools if session is available
                 if session:
                     connector = session.connector
-                    tools = await self.adapter.create_langchain_tools([connector])
+                    tools = await self.adapter._create_tools_from_connectors([connector])
 
                     # Check if this server's tools have changed
                     if (
@@ -322,18 +322,6 @@ class ServerManager:
 
             except Exception as e:
                 logger.error(f"Unexpected error listing tools for server '{server_name}': {e}")
-
-            # Add tool information to the result
-            if tools:
-                result += f"   Tools: {len(tools)} available\n"
-                # Optionally list some tool names
-                sample_tools = [tool.name for tool in tools[:3]]
-                if sample_tools:
-                    result += f"   Sample tools: {', '.join(sample_tools)}"
-                    if len(tools) > 3:
-                        result += f" and {len(tools) - 3} more\n"
-                    else:
-                        result += "\n"
 
         return result
 

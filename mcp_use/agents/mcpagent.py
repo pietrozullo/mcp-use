@@ -23,7 +23,7 @@ from mcp_use.session import MCPSession
 
 from ..adapters.langchain_adapter import LangChainAdapter
 from ..logging import logger
-from ..manager.server_manager import ServerManager
+from ..managers.server_manager import ServerManager
 from .prompts.system_prompt_builder import create_system_message
 from .prompts.templates import DEFAULT_SYSTEM_PROMPT_TEMPLATE, SERVER_MANAGER_SYSTEM_PROMPT_TEMPLATE
 
