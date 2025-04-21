@@ -1,6 +1,6 @@
 [project]
 name = "mcp-use"
-version = "1.2.6"
+version = "1.2.7"
 description = "MCP Library for LLMs"
 authors = [
     {name = "Pietro Zullo", email = "pietro.zullo@gmail.com"}
@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "mcp",
+    "mcp>=1.5.0",
     "langchain>=0.1.0",
     "langchain-community>=0.0.10",
     "websockets>=12.0",
