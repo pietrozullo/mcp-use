@@ -3,9 +3,9 @@ import time
 from typing import ClassVar
 
 import numpy as np
+from fastembed import TextEmbedding
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer
 
 from .base_tool import MCPServerTool
 
@@ -89,8 +89,8 @@ class ToolSearchEngine:
             return True
 
         try:
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
-            self.embedding_function = self.model.encode
+            self.model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+            self.embedding_function = lambda texts: list(self.model.embed(texts))
             return True
         except Exception:
             return False
