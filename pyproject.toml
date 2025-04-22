@@ -51,33 +51,6 @@ openai = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-
-[tool.ruff.lint]
-select = [
-    "E",  # pycodestyle errors
-    "F",  # pyflakes
-    "I",  # isort
-    "W",  # pycodestyle warnings
-    "B",  # flake8-bugbear
-    "UP", # pyupgrade
-]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Unused imports
-"tests/**/*.py" = ["F811", "F401"]  # Redefinition in test files
-"mcp_use/connectors/websocket.py" = ["C901"]  # Function too complex
-
-[tool.ruff.lint.isort]
-known-first-party = ["mcp_use"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
-
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"

@@ -4,10 +4,10 @@ repos:
     rev: v0.3.2
     hooks:
     -   id: ruff
-        args: [--fix, --exit-non-zero-on-fix, --config=pyproject.toml]
+        args: [--fix, --exit-non-zero-on-fix, --config=ruff.toml]
         types: [python]
     -   id: ruff-format
-        args: [--config=pyproject.toml]
+        args: [--config=ruff.toml]
         types: [python]
 
 -   repo: https://github.com/pre-commit/pre-commit-hooks
