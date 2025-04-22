@@ -491,7 +491,7 @@ async def main():
 
     # Create a custom LangChain agent
     llm_with_tools = llm.bind_tools(tools)
-    result = await llm_with_tools.ainvoke("What tools do you have avilable ? ")
+    result = await llm_with_tools.ainvoke("What tools do you have available ? ")
     print(result)
 
 
