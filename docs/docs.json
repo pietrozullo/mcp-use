@@ -27,6 +27,7 @@
               "essentials/llm-integration",
               "essentials/debugging",
               "essentials/connection-types",
+              "essentials/server-manager",
               "building-custom-agents"
             ]
           },

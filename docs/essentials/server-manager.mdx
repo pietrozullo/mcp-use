@@ -1,0 +1,342 @@
+---
+title: 'Server Manager'
+description: 'Intelligent management of multiple MCP servers and tool discovery'
+---
+
+# Server Manager
+
+The Server Manager is a powerful feature that helps manage connections to multiple MCP servers efficiently and enables tool discovery across servers. When your agent has access to tools from different servers, the Server Manager intelligently selects the appropriate server and helps discover the most relevant tools for each task.
+
+## Overview
+
+When building agents that need to interact with multiple MCP servers (such as combining web browsing with file operations or 3D modeling), the Server Manager:
+
+- Dynamically connects to the appropriate server based on the task at hand
+- Provides tool discovery and search capabilities across all configured servers
+- Minimizes unnecessary connections by only connecting to servers when needed
+- Reduces agent confusion by organizing tool sets appropriately
+- Improves overall performance and efficiency of multi-server operations
+
+## Enabling the Server Manager
+
+The Server Manager can be enabled by setting `use_server_manager=True` during the initialization of an `MCPAgent`:
+
+```python
+from mcp_use import MCPClient, MCPAgent
+from langchain_openai import ChatOpenAI
+
+# Create client with multiple servers
+client = MCPClient.from_config_file("multi_server_config.json")
+
+# Create agent with the Server Manager enabled
+agent = MCPAgent(
+    llm=ChatOpenAI(model="gpt-4o"),
+    client=client,
+    use_server_manager=True  # Enable the Server Manager
+)
+
+# The agent will now intelligently manage server connections
+```
+
+## Server Management Tools
+
+When the Server Manager is enabled, it provides the following management tools to the agent:
+
+1. **list_mcp_servers** - Lists all available MCP servers and their tools
+2. **connect_to_mcp_server** - Connects to a specific MCP server
+3. **get_active_mcp_server** - Shows which server is currently active
+4. **disconnect_from_mcp_server** - Disconnects from the current server
+5. **search_mcp_tools** - Searches for tools across all MCP servers
+6. **use_tool_from_server** - Uses a specific tool from a specific server without switching the active connection
+
+These tools allow the agent to discover available servers, connect to the appropriate server for a given task, search for specific tools, and manage server connections throughout its operation.
+
+## Tool Discovery and Search
+
+### Listing Available Servers and Their Tools
+
+The `list_mcp_servers` tool provides a comprehensive overview of all available servers and their tools:
+
+```python
+# Example of using the Server Manager for listing servers and tools
+result = await agent.run(
+    "What tools do I have available? List all servers and their tools."
+)
+```
+
+This will return output similar to:
+
+```
+Available MCP servers:
+1. playwright
+   Tools: navigate_browser, click_element, get_page_content, ...
+2. file_system
+   Tools: read_file, write_file, list_directory, ...
+```
+
+This allows the agent to understand which tools are available on each server before deciding which one to connect to.
+
+### Searching for Tools Across Servers
+
+The `search_mcp_tools` tool is especially powerful, allowing agents to search for specific tools across all servers based on functionality needed:
+
+```python
+# Example of searching for tools across servers
+result = await agent.run(
+    "I need to find tools that can help me navigate a website. Can you search for relevant tools?"
+)
+```
+
+This will search across all servers and return a ranked list of tools that match the query:
+
+```
+Search results for: 'navigate website'
+
+[1] Tool: navigate_browser (95.2% match)
+    Server: playwright
+    Description: Navigates to a specified URL in a web browser
+
+[2] Tool: click_element (87.4% match)
+    Server: playwright
+    Description: Clicks on an element on the page identified by a selector
+
+[3] Tool: get_page_content (82.1% match)
+    Server: playwright
+    Description: Retrieves the HTML content of the current page
+
+...
+
+To use a tool, connect to the appropriate server first, then invoke the tool.
+```
+
+This search functionality helps agents quickly find the most relevant tools for their tasks without needing to manually inspect all available tools across all servers.
+
+### Direct Tool Execution Across Servers
+
+The `use_tool_from_server` tool enables direct execution of a tool from a specific server without explicitly connecting to it first:
+
+```python
+# Example of using a tool from a specific server without switching context
+result = await agent.run(
+    "I need to navigate to https://example.com but I don't want to disrupt my current server connection. Can you use the navigate_browser tool from the playwright server directly?"
+)
+```
+
+This is especially useful for one-off operations where you don't want to disconnect from the current server just to perform a single action on another server.
+
+### Detailed Tool Information
+
+When an agent connects to a server, the Server Manager provides detailed descriptions of all available tools:
+
+```
+Connected to MCP server 'playwright'. 25 tools are now available.
+
+Available tools for this server:
+1. navigate_browser: Navigates to a specified URL in a web browser
+2. click_element: Clicks on an element on the page identified by a selector
+3. get_page_content: Retrieves the HTML content of the current page
+...
+```
+
+This detailed information helps the agent understand the purpose and capabilities of each tool, enabling it to make better decisions about which tool to use for a specific task.
+
+## Benefits of Using the Server Manager
+
+### 1. Reduced Connection Overhead
+
+Without the Server Manager, the agent might connect to all configured servers at once, even if only one server is needed for a particular task. The Server Manager ensures that only the necessary connections are established.
+
+### 2. Improved Tool Selection
+
+When an agent has access to dozens or even hundreds of tools from different servers, it can be challenging for the LLM to select the right tool for a specific task. The Server Manager helps organize tools by server and provides search capabilities, making it easier for the LLM to make appropriate selections.
+
+### 3. Efficient Resource Management
+
+The Server Manager monitors server usage and can close inactive connections, freeing up resources when they're no longer needed.
+
+### 4. Reduced Cognitive Load
+
+Agents don't need to memorize all available tools across all servers; they can discover and search for them at runtime.
+
+### 5. Dynamic Tool Selection
+
+Agents can adapt to available tools at runtime, connecting to the appropriate server for each task.
+
+### 6. Cross-Server Tool Usage
+
+The `use_tool_from_server` capability allows agents to use tools from different servers without disrupting their current workflow or connection state.
+
+## Example: Multi-Server Agent with Server Manager
+
+```python
+import asyncio
+from mcp_use import MCPClient, MCPAgent
+from langchain_anthropic import ChatAnthropic
+
+async def main():
+    # Create client with multiple servers
+    client = MCPClient.from_dict({
+        "mcpServers": {
+            "playwright": {
+                "command": "npx",
+                "args": ["@playwright/mcp@latest"],
+                "env": {"DISPLAY": ":1"}
+            },
+            "database": {
+                "command": "npx",
+                "args": ["@database/mcp-server"]
+            },
+            "file_system": {
+                "command": "npx",
+                "args": ["@file/mcp-server"]
+            }
+        }
+    })
+
+    # Create agent with the Server Manager
+    agent = MCPAgent(
+        llm=ChatAnthropic(model="claude-3-5-sonnet-20240620"),
+        client=client,
+        use_server_manager=True  # Enable the Server Manager
+    )
+
+    try:
+        # Run a complex task requiring tools from multiple servers
+        result = await agent.run(
+            """Task: Extract data from a website, save it to a file, and then load it into a database.
+
+            Start by figuring out which tools you need and which servers provide them,
+            then complete the task step by step."""
+        )
+        print(result)
+    finally:
+        # Clean up all sessions
+        await client.close_all_sessions()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+In this example, the agent will:
+1. Use `list_mcp_servers` or `search_mcp_tools` to discover available tools across all servers
+2. Connect to the appropriate server for each step of the task
+3. Use the most suitable tools to complete each part of the workflow
+4. Optionally use `use_tool_from_server` for one-off operations on other servers
+
+## How the Server Manager Works
+
+Internally, the Server Manager operates through these key mechanisms:
+
+1. **Tool Organization**: Server Manager maintains a registry of which tools belong to which servers
+2. **Server Management**: It manages connections to servers, only connecting when necessary
+3. **Tool Search**: It provides search capabilities across all available tools from all servers
+4. **Tool Updates**: It updates the available tools based on the currently active server
+5. **Connection Lifecycle**: It handles connecting and disconnecting from servers as needed
+6. **Cross-Server Operations**: It enables using tools from non-active servers when needed
+
+## Advanced Usage Examples
+
+### Example 1: Tool Search Workflow
+
+```python
+# The agent searches for tools that can help with a specific task
+result = await agent.run(
+    """I need to perform the following tasks:
+    1. Navigate to a website
+    2. Take a screenshot of the page
+    3. Save the screenshot to a file
+
+    First, search for tools that could help me with each of these tasks."""
+)
+```
+
+The agent will use the `search_mcp_tools` tool to find relevant tools for each part of the task, which might return results like:
+
+```
+[1] Tool: navigate_browser (96.5% match)
+    Server: playwright
+    Description: Navigates to a specified URL in a web browser
+
+[2] Tool: take_screenshot (95.1% match)
+    Server: playwright
+    Description: Captures a screenshot of the current page
+
+[3] Tool: write_file (92.8% match)
+    Server: file_system
+    Description: Writes data to a file at the specified path
+```
+
+### Example 2: Cross-Server Tool Usage
+
+```python
+# The agent is connected to the database server, but needs to use a web tool
+result = await agent.run(
+    """I'm currently analyzing database data, but I need to quickly check a website
+    for reference information. Can you help me navigate to https://example.com without
+    disrupting my database connection?"""
+)
+```
+
+The agent will use the `use_tool_from_server` tool to invoke the web navigation tool directly:
+
+```python
+# The agent invokes use_tool_from_server
+"I'll help you check the website without disrupting your database connection. I'll use the navigate_browser tool from the playwright server directly."
+
+# Tool execution
+tool_result = await use_tool_from_server(
+    server_name="playwright",
+    tool_name="navigate_browser",
+    tool_input={"url": "https://example.com"}
+)
+
+# After the tool execution, the agent remains connected to the database server
+```
+
+## Using Server Manager in Custom Implementations
+
+If you're building a custom agent, you can also leverage the Server Manager directly:
+
+```python
+from mcp_use import MCPClient, ServerManager
+from mcp_use.adapters.langchain_adapter import LangChainAdapter
+
+# Create client and adapter
+client = MCPClient.from_config_file("config.json")
+adapter = LangChainAdapter()
+
+# Create server manager
+server_manager = ServerManager(client=client, adapter=adapter)
+await server_manager.initialize()
+
+# Get server management tools
+management_tools = await server_manager.get_server_management_tools()
+
+# List available servers
+servers_info = await server_manager.list_servers()
+print(servers_info)
+
+# Connect to a specific server
+connection_result = await server_manager.connect_to_server("playwright")
+print(connection_result)
+
+# Get tools from the active server
+active_server_tools = await server_manager.get_active_server_tools()
+
+# Get all tools (management + active server)
+all_tools = await server_manager.get_all_tools()
+
+# Search for tools across all servers
+search_results = await server_manager.search_tools("navigate web page")
+print(search_results)
+
+# Use a tool from a specific server
+result = await server_manager.use_tool_from_server(
+    server_name="playwright",
+    tool_name="navigate_browser",
+    tool_input={"url": "https://example.com"}
+)
+```
+## Conclusion
+
+The Server Manager is a powerful feature that enhances the capabilities of multi-server MCP agents. By intelligently managing server connections, providing comprehensive tool discovery and search functionality, and enabling cross-server tool usage, it enables more complex and efficient agent workflows that combine capabilities from different MCP servers. Agents can dynamically discover, select, and use the most appropriate tools for each task, resulting in more effective task completion and better resource utilization.
