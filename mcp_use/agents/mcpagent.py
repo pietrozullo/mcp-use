@@ -114,7 +114,7 @@ class MCPAgent:
         if self.use_server_manager and self.server_manager:
             await self.server_manager.initialize()
             # Get server management tools
-            management_tools = await self.server_manager.get_server_management_tools()
+            management_tools = self.server_manager.tools
             self._tools = management_tools
             logger.info(
                 f"🔧 Server manager mode active with {len(management_tools)} management tools"
@@ -391,7 +391,7 @@ class MCPAgent:
             for step_num in range(steps):
                 # --- Check for tool updates if using server manager ---
                 if self.use_server_manager and self.server_manager:
-                    current_tools = await self.server_manager.get_all_tools()
+                    current_tools = self.server_manager.tools
                     current_tool_names = {tool.name for tool in current_tools}
                     existing_tool_names = {tool.name for tool in self._tools}
 
@@ -412,7 +412,7 @@ class MCPAgent:
                             [tool.name for tool in self._tools], excluded_colors=["green", "red"]
                         )
 
-                logger.info(f"🔍 Step {step_num + 1}/{steps}")
+                logger.info(f"👣 Step {step_num + 1}/{steps}")
 
                 # --- Plan and execute the next step ---
                 try:
