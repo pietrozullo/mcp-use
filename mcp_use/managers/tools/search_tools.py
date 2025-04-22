@@ -7,6 +7,7 @@ from fastembed import TextEmbedding
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from ...logging import logger
 from .base_tool import MCPServerTool
 
 
@@ -45,13 +46,38 @@ class SearchToolsTool(MCPServerTool):
         # No need to manually check or build the index here as the search_tools method will do that
 
         # Perform search using our search tool instance
-        return await self._search_tool.search_tools(
+        results = await self._search_tool.search_tools(
             query, top_k=top_k, active_server=self.server_manager.active_server
         )
+        return self.format_search_results(results)
 
     def _run(self, query: str, top_k: int = 100) -> str:
         """Synchronous version that raises a NotImplementedError - use _arun instead."""
         raise NotImplementedError("SearchToolsTool requires async execution. Use _arun instead.")
+
+    def format_search_results(self, results: list[tuple[BaseTool, str, float]]) -> str:
+        """Format search results in a consistent format."""
+
+        # Only show top_k results
+        results = results
+
+        formatted_output = "Search results\n\n"
+
+        for i, (tool, server_name, score) in enumerate(results):
+            # Format score as percentage
+            if i < 5:
+                score_pct = f"{score * 100:.1f}%"
+                logger.info(f"{i}: {tool.name} ({score_pct} match)")
+            formatted_output += f"[{i + 1}] Tool: {tool.name} ({score_pct} match)\n"
+            formatted_output += f"    Server: {server_name}\n"
+            formatted_output += f"    Description: {tool.description}\n\n"
+
+        # Add footer with information about how to use the results
+        formatted_output += (
+            "\nTo use a tool, connect to the appropriate server first, then invoke the tool."
+        )
+
+        return formatted_output
 
 
 class ToolSearchEngine:
@@ -274,31 +300,4 @@ class ToolSearchEngine:
             results = marked_results
 
         # Format and return the results
-        return self.format_search_results(query, results, top_k=min(top_k, 10))
-
-    def format_search_results(
-        self, query: str, results: list[tuple[BaseTool, str, float]], top_k: int = 5
-    ) -> str:
-        """Format search results in a consistent format."""
-        if not results:
-            return f"No results found for query: '{query}'"
-
-        # Only show top_k results
-        results = results[:top_k]
-
-        formatted_output = f"Search results for: '{query}'\n\n"
-
-        for i, (tool, server_name, score) in enumerate(results):
-            # Format score as percentage
-            score_pct = f"{score * 100:.1f}%"
-
-            formatted_output += f"[{i + 1}] Tool: {tool.name} ({score_pct} match)\n"
-            formatted_output += f"    Server: {server_name}\n"
-            formatted_output += f"    Description: {tool.description}\n\n"
-
-        # Add footer with information about how to use the results
-        formatted_output += (
-            "\nTo use a tool, connect to the appropriate server first, then invoke the tool."
-        )
-
-        return formatted_output
+        return results
