@@ -46,6 +46,9 @@ anthropic = [
 openai = [
     "openai>=1.10.0",
 ]
+search = [
+    "fastembed>=0.0.1",
+]
 
 [build-system]
 requires = ["hatchling"]
