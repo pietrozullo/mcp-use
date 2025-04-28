@@ -4,8 +4,8 @@ Please make sure to install Bright Data MCP Server
 https://www.npmjs.com/package/@brightdata/mcp
 
 """
-import os
 import asyncio
+import os
 from dotenv import load_dotenv
 
 from langchain_google_genai import ChatGoogleGenerativeAI
