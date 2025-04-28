@@ -1,6 +1,6 @@
 """
 Bright Data Example for mcp_use with Google Gemini.
-Please make sure to install Bright Data MCP Server 
+Please make sure to install Bright Data MCP Server
 https://www.npmjs.com/package/@brightdata/mcp
 
 """
@@ -11,14 +11,13 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from mcp_use import MCPAgent, MCPClient
 
-
 async def main():
     # Load .env if needed
     load_dotenv()
 
     # Configure MCP Server
     config = {
-            "mcpServers": 
+            "mcpServers":
             {
                 "airbnb": {
                     "command": "npx",
