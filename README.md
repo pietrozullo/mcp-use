@@ -352,6 +352,45 @@ if __name__ == "__main__":
 
 This example demonstrates how to connect to an MCP server running on a specific HTTP port. Make sure to start your MCP server before running this example.
 
+## HTTP Connection Example - Bright Data
+
+Below is the code snippet demonstrates the Bright Data MCP server usage via the MCP Agent and the client set with the config for Bright Data MCP Server.
+
+The example user query utilizes the Bright Data Google Search to perform the necessary action and responds back to the Google Search result.
+
+```
+async def main():
+    # Load .env if needed
+    load_dotenv()
+
+    # Configure MCP Server
+    config = {
+        "mcpServers": {
+            "Bright Data": {
+                "command": "npx",
+                "args": ["@brightdata/mcp"],
+                "env": {
+                    "API_TOKEN": os.environ["BRIGHT_DATA_KEY"]
+                }
+            }
+        }
+    }
+    client = MCPClient.from_dict(config)
+
+    # Set up the Gemini LLM (replace model name if needed)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+
+    # Create MCP Agent
+    agent = MCPAgent(llm=llm, client=client, max_steps=30)
+
+    # Run query
+    result = await agent.run(
+        "Find the best restaurant in San Francisco USING GOOGLE SEARCH",
+        max_steps=30,
+    )
+    print(f"\nResult: {result}")
+```
+
 # Multi-Server Support
 
 MCP-Use allows configuring and connecting to multiple MCP servers simultaneously using the `MCPClient`. This enables complex workflows that require tools from different servers, such as web browsing combined with file operations or 3D modeling.
@@ -433,6 +472,52 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+## Dynamic Server Selection - Airbnb, Bright Data
+
+Below is the code snippet for the dynamic MCP server selection and execution of the user query via the MCP Agent. 
+
+Note - The MCP client config needs to be configured for the Airbnb and Bright Data MCP Servers.
+
+```
+async def main():
+    # Load .env if needed
+    load_dotenv()
+
+    # Configure MCP Server
+    config = {
+            "mcpServers": 
+            {
+                "airbnb": {
+                    "command": "npx",
+                    "args": ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"]
+                },
+                "Bright Data": {
+                    "command": "npx",
+                    "args": ["@brightdata/mcp"],
+                    "env": {
+                        "API_TOKEN": os.environ["BRIGHT_DATA_KEY"]
+                    }
+                }
+            }
+    }
+
+    client = MCPClient.from_dict(config)
+
+    # Set up the Gemini LLM (replace model name if needed)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+
+    # Create MCP Agent
+    agent = MCPAgent(llm=llm, client=client, max_steps=30)
+
+    # Run a query that uses tools from multiple servers
+    result = await agent.run(
+        "Search for a nice place to stay in Barcelona on Airbnb, "
+        "then use Google Search to find nearby restaurants and attractions."
+    )
+    print(result)
+```
+
 
 # Tool Access Control
 
@@ -579,7 +664,7 @@ We love contributions! Feel free to open issues for bugs or feature requests. Lo
 
 - Python 3.11+
 - MCP implementation (like Playwright MCP)
-- LangChain and appropriate model libraries (OpenAI, Anthropic, etc.)
+- LangChain and appropriate model libraries (OpenAI, Anthropic, Google Gemini etc.)
 
 # Citation
 
