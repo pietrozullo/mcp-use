@@ -24,16 +24,17 @@ class TestStdioConnectorInitialization:
 
     def test_init_default(self):
         """Test initialization with default parameters."""
-        connector = StdioConnector()
+        with patch.object(StdioConnector, "_find_command_path", return_value="npx"):
+            connector = StdioConnector()
 
-        assert connector.command == "npx"
-        assert connector.args == []
-        assert connector.env is None
-        assert connector.errlog == sys.stderr
-        assert connector.client is None
-        assert connector._connection_manager is None
-        assert connector._tools is None
-        assert connector._connected is False
+            assert connector.command == "npx"
+            assert connector.args == []
+            assert connector.env is None
+            assert connector.errlog == sys.stderr
+            assert connector.client is None
+            assert connector._connection_manager is None
+            assert connector._tools is None
+            assert connector._connected is False
 
     def test_init_with_params(self):
         """Test initialization with custom parameters."""
@@ -42,16 +43,17 @@ class TestStdioConnectorInitialization:
         env = {"ENV_VAR": "value"}
         errlog = Mock()
 
-        connector = StdioConnector(command, args, env, errlog)
+        with patch.object(StdioConnector, "_find_command_path", return_value=command):
+            connector = StdioConnector(command, args, env, errlog)
 
-        assert connector.command == command
-        assert connector.args == args
-        assert connector.env == env
-        assert connector.errlog == errlog
-        assert connector.client is None
-        assert connector._connection_manager is None
-        assert connector._tools is None
-        assert connector._connected is False
+            assert connector.command == command
+            assert connector.args == args
+            assert connector.env == env
+            assert connector.errlog == errlog
+            assert connector.client is None
+            assert connector._connection_manager is None
+            assert connector._tools is None
+            assert connector._connected is False
 
 
 class TestStdioConnectorConnection:
