@@ -9,7 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from mcp import ClientSession
-from mcp.types import CallToolResult, Tool
+from mcp.shared.exceptions import McpError
+from mcp.types import CallToolResult, GetPromptResult, Prompt, ReadResourceResult, Resource, Tool
 
 from ..logging import logger
 from ..task_managers import ConnectionManager
@@ -26,6 +27,8 @@ class BaseConnector(ABC):
         self.client: ClientSession | None = None
         self._connection_manager: ConnectionManager | None = None
         self._tools: list[Tool] | None = None
+        self._resources: list[Resource] | None = None
+        self._prompts: list[Prompt] | None = None
         self._connected = False
 
     @abstractmethod
@@ -89,10 +92,22 @@ class BaseConnector(ABC):
         result = await self.client.initialize()
 
         # Get available tools
-        tools_result = await self.client.list_tools()
-        self._tools = tools_result.tools
+        tools_result = await self.list_tools()
+        self._tools = tools_result
 
-        logger.debug(f"MCP session initialized with {len(self._tools)} tools")
+        # Get available resources
+        resources_result = await self.list_resources()
+        self._resources = resources_result
+
+        # Get available prompts
+        prompts_result = await self.list_prompts()
+        self._prompts = prompts_result
+
+        logger.debug(
+            f"MCP session initialized with {len(self._tools)} tools, "
+            f"{len(self._resources)} resources, "
+            f"and {len(self._prompts)} prompts"
+        )
 
         return result
 
@@ -102,6 +117,20 @@ class BaseConnector(ABC):
         if not self._tools:
             raise RuntimeError("MCP client is not initialized")
         return self._tools
+
+    @property
+    def resources(self) -> list[Resource]:
+        """Get the list of available resources."""
+        if not self._resources:
+            raise RuntimeError("MCP client is not initialized")
+        return self._resources
+
+    @property
+    def prompts(self) -> list[Prompt]:
+        """Get the list of available prompts."""
+        if not self._prompts:
+            raise RuntimeError("MCP client is not initialized")
+        return self._prompts
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult:
         """Call an MCP tool with the given arguments."""
@@ -113,36 +142,57 @@ class BaseConnector(ABC):
         logger.debug(f"Tool '{name}' called with result: {result}")
         return result
 
-    async def list_resources(self) -> list[dict[str, Any]]:
+    async def list_tools(self) -> list[Tool]:
+        """List all available tools from the MCP implementation."""
+        if not self.client:
+            raise RuntimeError("MCP client is not connected")
+
+        logger.debug("Listing tools")
+        try:
+            result = await self.client.list_tools()
+            return result.tools
+        except McpError as e:
+            logger.error(f"Error listing tools: {e}")
+            return []
+
+    async def list_resources(self) -> list[Resource]:
         """List all available resources from the MCP implementation."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug("Listing resources")
-        resources = await self.client.list_resources()
-        return resources
+        try:
+            result = await self.client.list_resources()
+            return result.resources
+        except McpError as e:
+            logger.error(f"Error listing resources: {e}")
+            return []
 
-    async def read_resource(self, uri: str) -> tuple[bytes, str]:
+    async def read_resource(self, uri: str) -> ReadResourceResult:
         """Read a resource by URI."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug(f"Reading resource: {uri}")
         resource = await self.client.read_resource(uri)
-        return resource.content, resource.mimeType
+        return resource.contents
 
-    async def list_prompts(self) -> list[dict[str, Any]]:
+    async def list_prompts(self) -> list[Prompt]:
         """List all available prompts from the MCP implementation."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug("Listing prompts")
-        prompts = await self.client.list_prompts()
-        return prompts
+        try:
+            result = await self.client.list_prompts()
+            return result.prompts
+        except McpError as e:
+            logger.error(f"Error listing prompts: {e}")
+            return []
 
     async def get_prompt(
         self, name: str, arguments: dict[str, Any] | None = None
-    ) -> tuple[bytes, str]:
+    ) -> GetPromptResult:
         """Get a prompt by name."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
