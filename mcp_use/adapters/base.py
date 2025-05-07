@@ -5,7 +5,9 @@ This module provides the abstract base class that all MCP tool adapters should i
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar
+from typing import TypeVar
+
+from mcp.types import Prompt, Resource, Tool
 
 from ..client import MCPClient
 from ..connectors.base import BaseConnector
@@ -90,19 +92,36 @@ class BaseAdapter(ABC):
             return self._connector_tool_map[connector]
 
         # Create tools for this connector
-        connector_tools = []
 
         # Make sure the connector is initialized and has tools
         success = await self._ensure_connector_initialized(connector)
         if not success:
             return []
 
+        connector_tools = []
         # Now create tools for each MCP tool
         for tool in connector.tools:
             # Convert the tool and add it to the list if conversion was successful
             converted_tool = self._convert_tool(tool, connector)
             if converted_tool:
                 connector_tools.append(converted_tool)
+
+        # Convert resources to tools so that agents can access resource content directly
+        resources_list = connector.resources or []
+        if resources_list:
+            for resource in resources_list:
+                converted_resource = self._convert_resource(resource, connector)
+                if converted_resource:
+                    connector_tools.append(converted_resource)
+
+        # Convert prompts to tools so that agents can retrieve prompt content
+        prompts_list = connector.prompts or []
+        if prompts_list:
+            for prompt in prompts_list:
+                converted_prompt = self._convert_prompt(prompt, connector)
+                if converted_prompt:
+                    connector_tools.append(converted_prompt)
+        # ------------------------------
 
         # Store the tools for this connector
         self._connector_tool_map[connector] = connector_tools
@@ -116,16 +135,18 @@ class BaseAdapter(ABC):
         return connector_tools
 
     @abstractmethod
-    def _convert_tool(self, mcp_tool: dict[str, Any], connector: BaseConnector) -> T:
-        """Convert an MCP tool to the target framework's tool format.
+    def _convert_tool(self, mcp_tool: Tool, connector: BaseConnector) -> T:
+        """Convert an MCP tool to the target framework's tool format."""
+        pass
 
-        Args:
-            mcp_tool: The MCP tool to convert.
-            connector: The connector that provides this tool.
+    @abstractmethod
+    def _convert_resource(self, mcp_resource: Resource, connector: BaseConnector) -> T:
+        """Convert an MCP resource to the target framework's resource format."""
+        pass
 
-        Returns:
-            A tool in the target framework's format.
-        """
+    @abstractmethod
+    def _convert_prompt(self, mcp_prompt: Prompt, connector: BaseConnector) -> T:
+        """Convert an MCP prompt to the target framework's prompt format."""
         pass
 
     async def _create_tools_from_connectors(self, connectors: list[BaseConnector]) -> list[T]:

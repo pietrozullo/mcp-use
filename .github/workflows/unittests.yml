@@ -28,4 +28,4 @@ jobs:
           ruff check .
       - name: Test with pytest
         run: |
-          pytest
+          pytest tests/unit

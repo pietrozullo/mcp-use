@@ -4,12 +4,21 @@ LangChain adapter for MCP tools.
 This module provides utilities to convert MCP tools to LangChain tools.
 """
 
+import re
 from typing import Any, NoReturn
 
 from jsonschema_pydantic import jsonschema_to_pydantic
 from langchain_core.tools import BaseTool, ToolException
-from mcp.types import CallToolResult, EmbeddedResource, ImageContent, TextContent
-from pydantic import BaseModel
+from mcp.types import (
+    CallToolResult,
+    EmbeddedResource,
+    ImageContent,
+    Prompt,
+    ReadResourceRequestParams,
+    Resource,
+    TextContent,
+)
+from pydantic import BaseModel, Field, create_model
 
 from ..connectors.base import BaseConnector
 from ..logging import logger
@@ -162,3 +171,104 @@ class LangChainAdapter(BaseAdapter):
                     raise
 
         return McpToLangChainAdapter()
+
+    def _convert_resource(self, mcp_resource: Resource, connector: BaseConnector) -> BaseTool:
+        """Convert an MCP resource to LangChain's tool format.
+
+        Each resource becomes an async tool that returns its content when called.
+        The tool takes **no** arguments because the resource URI is fixed.
+        """
+
+        def _sanitize(name: str) -> str:
+            return re.sub(r"[^A-Za-z0-9_]+", "_", name).lower().strip("_")
+
+        class ResourceTool(BaseTool):
+            name: str = _sanitize(mcp_resource.name or f"resource_{mcp_resource.uri}")
+            description: str = (
+                mcp_resource.description
+                or f"Return the content of the resource located at URI {mcp_resource.uri}."
+            )
+            args_schema: type[BaseModel] = ReadResourceRequestParams
+            tool_connector: BaseConnector = connector
+            handle_tool_error: bool = True
+
+            def _run(self, **kwargs: Any) -> NoReturn:
+                raise NotImplementedError("Resource tools only support async operations")
+
+            async def _arun(self, **kwargs: Any) -> Any:
+                logger.debug(f'Resource tool: "{self.name}" called')
+                try:
+                    result = await self.tool_connector.read_resource(mcp_resource.uri)
+                    for content in result.contents:
+                        # Attempt to decode bytes if necessary
+                        if isinstance(content, bytes):
+                            content_decoded = content.decode()
+                        else:
+                            content_decoded = str(content)
+
+                    return content_decoded
+                except Exception as e:
+                    if self.handle_tool_error:
+                        return f"Error reading resource: {str(e)}"
+                    raise
+
+        return ResourceTool()
+
+    def _convert_prompt(self, mcp_prompt: Prompt, connector: BaseConnector) -> BaseTool:
+        """Convert an MCP prompt to LangChain's tool format.
+
+        The resulting tool executes `get_prompt` on the connector with the prompt's name and
+        the user-provided arguments (if any). The tool returns the decoded prompt content.
+        """
+        prompt_arguments = mcp_prompt.arguments
+
+        # Sanitize the prompt name to create a valid Python identifier for the model name
+        base_model_name = re.sub(r"[^a-zA-Z0-9_]", "_", mcp_prompt.name)
+        if not base_model_name or base_model_name[0].isdigit():
+            base_model_name = "PromptArgs_" + base_model_name
+        dynamic_model_name = f"{base_model_name}_InputSchema"
+
+        if prompt_arguments:
+            field_definitions_for_create: dict[str, Any] = {}
+            for arg in prompt_arguments:
+                param_type: type = getattr(arg, "type", str)
+                if arg.required:
+                    field_definitions_for_create[arg.name] = (
+                        param_type,
+                        Field(description=arg.description),
+                    )
+                else:
+                    field_definitions_for_create[arg.name] = (
+                        param_type | None,
+                        Field(None, description=arg.description),
+                    )
+
+            InputSchema = create_model(
+                dynamic_model_name, **field_definitions_for_create, __base__=BaseModel
+            )
+        else:
+            # Create an empty Pydantic model if there are no arguments
+            InputSchema = create_model(dynamic_model_name, __base__=BaseModel)
+
+        class PromptTool(BaseTool):
+            name: str = mcp_prompt.name
+            description: str = mcp_prompt.description
+
+            args_schema: type[BaseModel] = InputSchema
+            tool_connector: BaseConnector = connector
+            handle_tool_error: bool = True
+
+            def _run(self, **kwargs: Any) -> NoReturn:
+                raise NotImplementedError("Prompt tools only support async operations")
+
+            async def _arun(self, **kwargs: Any) -> Any:
+                logger.debug(f'Prompt tool: "{self.name}" called with args: {kwargs}')
+                try:
+                    result = await self.tool_connector.get_prompt(self.name, kwargs)
+                    return result.messages
+                except Exception as e:
+                    if self.handle_tool_error:
+                        return f"Error fetching prompt: {str(e)}"
+                    raise
+
+        return PromptTool()

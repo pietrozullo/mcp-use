@@ -9,7 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from mcp import ClientSession
-from mcp.types import CallToolResult, Tool
+from mcp.shared.exceptions import McpError
+from mcp.types import CallToolResult, GetPromptResult, Prompt, ReadResourceResult, Resource, Tool
 
 from ..logging import logger
 from ..task_managers import ConnectionManager
@@ -26,6 +27,8 @@ class BaseConnector(ABC):
         self.client: ClientSession | None = None
         self._connection_manager: ConnectionManager | None = None
         self._tools: list[Tool] | None = None
+        self._resources: list[Resource] | None = None
+        self._prompts: list[Prompt] | None = None
         self._connected = False
 
     @abstractmethod
@@ -74,6 +77,8 @@ class BaseConnector(ABC):
 
         # Reset tools
         self._tools = None
+        self._resources = None
+        self._prompts = None
 
         if errors:
             logger.warning(f"Encountered {len(errors)} errors during resource cleanup")
@@ -88,20 +93,57 @@ class BaseConnector(ABC):
         # Initialize the session
         result = await self.client.initialize()
 
-        # Get available tools
-        tools_result = await self.client.list_tools()
-        self._tools = tools_result.tools
+        server_capabilities = result.capabilities
 
-        logger.debug(f"MCP session initialized with {len(self._tools)} tools")
+        if server_capabilities.tools:
+            # Get available tools
+            tools_result = await self.list_tools()
+            self._tools = tools_result or []
+        else:
+            self._tools = []
+
+        if server_capabilities.resources:
+            # Get available resources
+            resources_result = await self.list_resources()
+            self._resources = resources_result or []
+        else:
+            self._resources = []
+
+        if server_capabilities.prompts:
+            # Get available prompts
+            prompts_result = await self.list_prompts()
+            self._prompts = prompts_result or []
+        else:
+            self._prompts = []
+
+        logger.debug(
+            f"MCP session initialized with {len(self._tools)} tools, "
+            f"{len(self._resources)} resources, "
+            f"and {len(self._prompts)} prompts"
+        )
 
         return result
 
     @property
     def tools(self) -> list[Tool]:
         """Get the list of available tools."""
-        if not self._tools:
+        if self._tools is None:
             raise RuntimeError("MCP client is not initialized")
         return self._tools
+
+    @property
+    def resources(self) -> list[Resource]:
+        """Get the list of available resources."""
+        if self._resources is None:
+            raise RuntimeError("MCP client is not initialized")
+        return self._resources
+
+    @property
+    def prompts(self) -> list[Prompt]:
+        """Get the list of available prompts."""
+        if self._prompts is None:
+            raise RuntimeError("MCP client is not initialized")
+        return self._prompts
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult:
         """Call an MCP tool with the given arguments."""
@@ -113,43 +155,64 @@ class BaseConnector(ABC):
         logger.debug(f"Tool '{name}' called with result: {result}")
         return result
 
-    async def list_resources(self) -> list[dict[str, Any]]:
+    async def list_tools(self) -> list[Tool]:
+        """List all available tools from the MCP implementation."""
+        if not self.client:
+            raise RuntimeError("MCP client is not connected")
+
+        logger.debug("Listing tools")
+        try:
+            result = await self.client.list_tools()
+            return result.tools
+        except McpError as e:
+            logger.error(f"Error listing tools: {e}")
+            return []
+
+    async def list_resources(self) -> list[Resource]:
         """List all available resources from the MCP implementation."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug("Listing resources")
-        resources = await self.client.list_resources()
-        return resources
+        try:
+            result = await self.client.list_resources()
+            return result.resources
+        except McpError as e:
+            logger.error(f"Error listing resources: {e}")
+            return []
 
-    async def read_resource(self, uri: str) -> tuple[bytes, str]:
+    async def read_resource(self, uri: str) -> ReadResourceResult:
         """Read a resource by URI."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug(f"Reading resource: {uri}")
-        resource = await self.client.read_resource(uri)
-        return resource.content, resource.mimeType
+        result = await self.client.read_resource(uri)
+        return result
 
-    async def list_prompts(self) -> list[dict[str, Any]]:
+    async def list_prompts(self) -> list[Prompt]:
         """List all available prompts from the MCP implementation."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug("Listing prompts")
-        prompts = await self.client.list_prompts()
-        return prompts
+        try:
+            result = await self.client.list_prompts()
+            return result.prompts
+        except McpError as e:
+            logger.error(f"Error listing prompts: {e}")
+            return []
 
     async def get_prompt(
         self, name: str, arguments: dict[str, Any] | None = None
-    ) -> tuple[bytes, str]:
+    ) -> GetPromptResult:
         """Get a prompt by name."""
         if not self.client:
             raise RuntimeError("MCP client is not connected")
 
         logger.debug(f"Getting prompt: {name}")
-        prompt = await self.client.get_prompt(name, arguments)
-        return prompt
+        result = await self.client.get_prompt(name, arguments)
+        return result
 
     async def request(self, method: str, params: dict[str, Any] | None = None) -> Any:
         """Send a raw request to the MCP implementation."""

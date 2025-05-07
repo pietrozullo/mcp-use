@@ -6,7 +6,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from mcp.types import CallToolResult, ListResourcesResult, ReadResourceResult, Tool
+from mcp.types import CallToolResult, Tool
 
 from mcp_use.connectors.stdio import StdioConnector
 from mcp_use.task_managers.stdio import StdioConnectionManager
@@ -177,21 +177,47 @@ class TestStdioConnectorOperations:
         connector = StdioConnector()
 
         # Setup mocks
-        mock_client = Mock()
-        mock_client.initialize = AsyncMock(return_value={"status": "success"})
-        mock_client.list_tools = AsyncMock(return_value=Mock(tools=[Mock(spec=Tool)]))
+        mock_client = MagicMock()
+        # Mock client.initialize() to return capabilities
+        mock_init_result = MagicMock()
+        mock_init_result.status = (
+            "success"  # Or whatever structure the Stdio connector expects to return
+        )
+        mock_init_result.capabilities = MagicMock(tools=True, resources=True, prompts=True)
+        mock_client.initialize = AsyncMock(return_value=mock_init_result)
+
+        # Mocks for list_tools, list_resources, list_prompts (already well-structured)
+        mock_tools_response = MagicMock(tools=[MagicMock(spec=Tool)])
+        mock_client.list_tools = AsyncMock(return_value=mock_tools_response)
+
+        mock_list_resources_response = MagicMock()
+        mock_list_resources_response.resources = []
+        mock_client.list_resources = AsyncMock(return_value=mock_list_resources_response)
+
+        # Mock list_prompts (called by base initialize)
+        mock_list_prompts_response = MagicMock()
+        mock_list_prompts_response.prompts = []  # Assumes a .prompts attribute
+        mock_client.list_prompts = AsyncMock(return_value=mock_list_prompts_response)
+
         connector.client = mock_client
 
         # Initialize
-        result = await connector.initialize()
+        result_session_info = await connector.initialize()
 
-        # Verify
+        # Verify calls
         mock_client.initialize.assert_called_once()
         mock_client.list_tools.assert_called_once()
+        mock_client.list_resources.assert_called_once()
+        mock_client.list_prompts.assert_called_once()
 
-        assert result == {"status": "success"}
+        # Verify connector state and return value
+        assert result_session_info == mock_init_result
         assert connector._tools is not None
         assert len(connector._tools) == 1
+        assert connector._resources is not None
+        assert len(connector._resources) == 0  # Based on current mock for list_resources
+        assert connector._prompts is not None
+        assert len(connector._prompts) == 0  # Based on current mock for list_prompts
 
     @pytest.mark.asyncio
     async def test_initialize_no_client(self):
@@ -257,6 +283,7 @@ class TestStdioConnectorOperations:
         connector = StdioConnector()
         mock_client = Mock()
         mock_result = MagicMock()
+        mock_result.resources = [MagicMock()]
         mock_client.list_resources = AsyncMock(return_value=mock_result)
         connector.client = mock_client
 
@@ -265,7 +292,7 @@ class TestStdioConnectorOperations:
 
         # Verify
         mock_client.list_resources.assert_called_once()
-        assert result == mock_result
+        assert result == mock_result.resources
 
     @pytest.mark.asyncio
     async def test_list_resources_no_client(self):
@@ -280,22 +307,48 @@ class TestStdioConnectorOperations:
     @pytest.mark.asyncio
     async def test_read_resource(self):
         """Test reading a resource."""
+        # Mocked return for connector.client.read_resource().
+        # Needs the structure StdioConnector.read_resource expects.
+        mock_client_return_value = (
+            MagicMock()
+        )  # spec=ReadResourceResult optional with MagicMock if defining manually
+
+        # Define the nested structure
+        content_item_mock = MagicMock()
+        content_item_mock.content = b"test content"
+        # Note camelCase.
+        # Adjust if StdioConnector expects a different attribute name for mimetype.
+        content_item_mock.mimeType = "text/plain"
+
+        result_attribute_mock = MagicMock()  # This is for the .result attribute
+        result_attribute_mock.contents = [content_item_mock]  # .contents is a list of these items
+
+        mock_client_return_value.result = result_attribute_mock
+
+        # Setup the connector and mock client
         connector = StdioConnector()
-        mock_client = Mock()
-        mock_result = Mock(spec=ReadResourceResult)
-        mock_result.content = b"test content"
-        mock_result.mimeType = "text/plain"
-        mock_client.read_resource = AsyncMock(return_value=mock_result)
-        connector.client = mock_client
+        # Mock the Stdio client and its methods.
+        mock_stdio_client = MagicMock()
+        mock_stdio_client.read_resource = AsyncMock(return_value=mock_client_return_value)
+        # If other client methods are called by StdioConnector.read_resource,
+        # ensure they are AsyncMocks.
 
-        # Read resource
-        uri = "test_uri"
-        content, mime_type = await connector.read_resource(uri)
+        connector.client = mock_stdio_client
+        # If connector relies on state from connect/initialize (e.g., _connected = True),
+        # set it manually for this unit test.
 
-        # Verify
-        mock_client.read_resource.assert_called_once_with(uri)
-        assert content == b"test content"
-        assert mime_type == "text/plain"
+        # Act: Call the connector's method
+        # connector.read_resource returns a ReadResourceResult object.
+        read_resource_result = await connector.read_resource("test/resource")
+
+        # Assert: Verify the outcome and client interaction
+        # Assert attributes of ReadResourceResult against mock_client_return_value.
+        assert read_resource_result.result is not None
+        assert read_resource_result.result.contents is not None
+        assert len(read_resource_result.result.contents) == 1
+        assert read_resource_result.result.contents[0].content == b"test content"
+        assert read_resource_result.result.contents[0].mimeType == "text/plain"
+        mock_stdio_client.read_resource.assert_called_once_with("test/resource")
 
     @pytest.mark.asyncio
     async def test_read_resource_no_client(self):
