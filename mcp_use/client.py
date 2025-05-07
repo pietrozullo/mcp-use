@@ -162,9 +162,7 @@ class MCPClient:
 
         # Create sessions for all servers
         for name in servers:
-            session = await self.create_session(name, auto_initialize)
-            if auto_initialize:
-                await session.initialize()
+            await self.create_session(name, auto_initialize)
 
         return self.sessions
 
