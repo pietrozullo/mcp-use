@@ -178,7 +178,15 @@ class TestStdioConnectorOperations:
 
         # Setup mocks
         mock_client = MagicMock()
-        mock_client.initialize = AsyncMock(return_value={"status": "success"})
+        # Mock client.initialize() to return capabilities
+        mock_init_result = MagicMock()
+        mock_init_result.status = (
+            "success"  # Or whatever structure the Stdio connector expects to return
+        )
+        mock_init_result.capabilities = MagicMock(tools=True, resources=True, prompts=True)
+        mock_client.initialize = AsyncMock(return_value=mock_init_result)
+
+        # Mocks for list_tools, list_resources, list_prompts (already well-structured)
         mock_tools_response = MagicMock(tools=[MagicMock(spec=Tool)])
         mock_client.list_tools = AsyncMock(return_value=mock_tools_response)
 
@@ -194,15 +202,22 @@ class TestStdioConnectorOperations:
         connector.client = mock_client
 
         # Initialize
-        result = await connector.initialize()
+        result_session_info = await connector.initialize()
 
-        # Verify
+        # Verify calls
         mock_client.initialize.assert_called_once()
         mock_client.list_tools.assert_called_once()
+        mock_client.list_resources.assert_called_once()
+        mock_client.list_prompts.assert_called_once()
 
-        assert result == {"status": "success"}
+        # Verify connector state and return value
+        assert result_session_info == mock_init_result
         assert connector._tools is not None
         assert len(connector._tools) == 1
+        assert connector._resources is not None
+        assert len(connector._resources) == 0  # Based on current mock for list_resources
+        assert connector._prompts is not None
+        assert len(connector._prompts) == 0  # Based on current mock for list_prompts
 
     @pytest.mark.asyncio
     async def test_initialize_no_client(self):

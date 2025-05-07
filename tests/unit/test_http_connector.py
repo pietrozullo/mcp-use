@@ -7,7 +7,7 @@ from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
-from mcp.types import Tool
+from mcp.types import Prompt, Resource, Tool
 
 from mcp_use.connectors.http import HttpConnector
 from mcp_use.task_managers import SseConnectionManager
@@ -223,19 +223,36 @@ class TestHttpConnectorOperations(IsolatedAsyncioTestCase):
         self.assertEqual(str(context.exception), "MCP client is not connected")
 
     async def test_initialize(self, _):
-        """Test initializing the MCP session."""
-        # Setup mock responses
-        self.connector.client.initialize.return_value = {"session_id": "test_session"}
+        """Test initializing the MCP session with all capabilities enabled."""
+        # Setup mock for client.initialize() to return capabilities
+        mock_init_result = MagicMock()
+        mock_init_result.session_id = "test_session"
+        mock_init_result.capabilities = MagicMock(tools=True, resources=True, prompts=True)
+        self.connector.client.initialize.return_value = mock_init_result
+
+        # Setup mocks for list_tools, list_resources, and list_prompts
         self.connector.client.list_tools.return_value = MagicMock(tools=[MagicMock(spec=Tool)])
+        self.connector.client.list_resources.return_value = MagicMock(
+            resources=[MagicMock(spec=Resource)]
+        )
+        self.connector.client.list_prompts.return_value = MagicMock(
+            prompts=[MagicMock(spec=Prompt)]
+        )
 
         # Initialize
-        result = await self.connector.initialize()
+        result_session_info = await self.connector.initialize()
 
-        # Verify
+        # Verify calls
         self.connector.client.initialize.assert_called_once()
         self.connector.client.list_tools.assert_called_once()
-        self.assertEqual(result, {"session_id": "test_session"})
+        self.connector.client.list_resources.assert_called_once()
+        self.connector.client.list_prompts.assert_called_once()
+
+        # Verify connector state
+        self.assertEqual(result_session_info, mock_init_result)
         self.assertEqual(len(self.connector._tools), 1)
+        self.assertEqual(len(self.connector._resources), 1)
+        self.assertEqual(len(self.connector._prompts), 1)
 
     async def test_initialize_no_client(self, _):
         """Test initializing without a client."""
