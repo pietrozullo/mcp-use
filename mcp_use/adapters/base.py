@@ -92,13 +92,13 @@ class BaseAdapter(ABC):
             return self._connector_tool_map[connector]
 
         # Create tools for this connector
-        connector_tools = []
 
         # Make sure the connector is initialized and has tools
         success = await self._ensure_connector_initialized(connector)
         if not success:
             return []
 
+        connector_tools = []
         # Now create tools for each MCP tool
         for tool in connector.tools:
             # Convert the tool and add it to the list if conversion was successful

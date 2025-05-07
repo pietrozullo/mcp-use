@@ -77,6 +77,8 @@ class BaseConnector(ABC):
 
         # Reset tools
         self._tools = None
+        self._resources = None
+        self._prompts = None
 
         if errors:
             logger.warning(f"Encountered {len(errors)} errors during resource cleanup")
@@ -91,17 +93,28 @@ class BaseConnector(ABC):
         # Initialize the session
         result = await self.client.initialize()
 
-        # Get available tools
-        tools_result = await self.list_tools()
-        self._tools = tools_result
+        server_capabilities = result.capabilities
 
-        # Get available resources
-        resources_result = await self.list_resources()
-        self._resources = resources_result
+        if server_capabilities.tools:
+            # Get available tools
+            tools_result = await self.list_tools()
+            self._tools = tools_result or []
+        else:
+            self._tools = []
 
-        # Get available prompts
-        prompts_result = await self.list_prompts()
-        self._prompts = prompts_result
+        if server_capabilities.resources:
+            # Get available resources
+            resources_result = await self.list_resources()
+            self._resources = resources_result or []
+        else:
+            self._resources = []
+
+        if server_capabilities.prompts:
+            # Get available prompts
+            prompts_result = await self.list_prompts()
+            self._prompts = prompts_result or []
+        else:
+            self._prompts = []
 
         logger.debug(
             f"MCP session initialized with {len(self._tools)} tools, "
@@ -114,21 +127,21 @@ class BaseConnector(ABC):
     @property
     def tools(self) -> list[Tool]:
         """Get the list of available tools."""
-        if not self._tools:
+        if self._tools is None:
             raise RuntimeError("MCP client is not initialized")
         return self._tools
 
     @property
     def resources(self) -> list[Resource]:
         """Get the list of available resources."""
-        if not self._resources:
+        if self._resources is None:
             raise RuntimeError("MCP client is not initialized")
         return self._resources
 
     @property
     def prompts(self) -> list[Prompt]:
         """Get the list of available prompts."""
-        if not self._prompts:
+        if self._prompts is None:
             raise RuntimeError("MCP client is not initialized")
         return self._prompts
 
