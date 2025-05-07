@@ -9,7 +9,7 @@ This guide will help you set up your development environment and contribute to m
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.11 or higher
 - Git
 - Node.js and npm (for MCP server dependencies)
 
@@ -111,25 +111,4 @@ mcp-use/
 ├── docs/             # Documentation
 ├── static/           # Static assets
 └── pyproject.toml    # Project configuration
-```
-
-## Adding New MCP Servers
-
-To add support for a new MCP server:
-
-1. Create a new configuration template in the examples directory
-2. Add necessary server-specific code in the `mcp_use` package
-3. Update documentation with new server information
-4. Add tests for the new server functionality
-
-## Release Process
-
-1. Update version in `pyproject.toml`
-2. Update CHANGELOG.md
-3. Create a new release tag
-4. Build and publish to PyPI:
-
-```bash
-python -m build
-python -m twine upload dist/*
 ```

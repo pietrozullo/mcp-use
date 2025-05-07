@@ -118,6 +118,9 @@ class LangChainAdapter(BaseAdapter):
             tool_connector: BaseConnector = connector  # Renamed variable to avoid name conflict
             handle_tool_error: bool = True
 
+            def __repr__(self) -> str:
+                return f"MCP tool: {self.name}: {self.description}"
+
             def _run(self, **kwargs: Any) -> NoReturn:
                 """Synchronous run method that always raises an error.
 

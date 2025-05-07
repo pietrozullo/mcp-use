@@ -131,6 +131,26 @@ class BaseConnector(ABC):
         resource = await self.client.read_resource(uri)
         return resource.content, resource.mimeType
 
+    async def list_prompts(self) -> list[dict[str, Any]]:
+        """List all available prompts from the MCP implementation."""
+        if not self.client:
+            raise RuntimeError("MCP client is not connected")
+
+        logger.debug("Listing prompts")
+        prompts = await self.client.list_prompts()
+        return prompts
+
+    async def get_prompt(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> tuple[bytes, str]:
+        """Get a prompt by name."""
+        if not self.client:
+            raise RuntimeError("MCP client is not connected")
+
+        logger.debug(f"Getting prompt: {name}")
+        prompt = await self.client.get_prompt(name, arguments)
+        return prompt
+
     async def request(self, method: str, params: dict[str, Any] | None = None) -> Any:
         """Send a raw request to the MCP implementation."""
         if not self.client:

@@ -1,6 +1,6 @@
 [project]
 name = "mcp-use"
-version = "1.2.6"
+version = "1.2.8"
 description = "MCP Library for LLMs"
 authors = [
     {name = "Pietro Zullo", email = "pietro.zullo@gmail.com"}
@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "mcp",
+    "mcp>=1.5.0",
     "langchain>=0.1.0",
     "langchain-community>=0.0.10",
     "websockets>=12.0",
@@ -46,37 +46,13 @@ anthropic = [
 openai = [
     "openai>=1.10.0",
 ]
+search = [
+    "fastembed>=0.0.1",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-
-[tool.ruff.lint]
-select = [
-    "E",  # pycodestyle errors
-    "F",  # pyflakes
-    "I",  # isort
-    "W",  # pycodestyle warnings
-    "B",  # flake8-bugbear
-    "UP", # pyupgrade
-]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Unused imports
-"tests/**/*.py" = ["F811", "F401"]  # Redefinition in test files
-"mcp_use/connectors/websocket.py" = ["C901"]  # Function too complex
-
-[tool.ruff.lint.isort]
-known-first-party = ["mcp_use"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

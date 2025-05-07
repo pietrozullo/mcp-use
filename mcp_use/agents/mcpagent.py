@@ -23,9 +23,9 @@ from mcp_use.session import MCPSession
 
 from ..adapters.langchain_adapter import LangChainAdapter
 from ..logging import logger
+from ..managers.server_manager import ServerManager
 from .prompts.system_prompt_builder import create_system_message
 from .prompts.templates import DEFAULT_SYSTEM_PROMPT_TEMPLATE, SERVER_MANAGER_SYSTEM_PROMPT_TEMPLATE
-from .server_manager import ServerManager
 
 set_debug(logger.level == logging.DEBUG)
 
@@ -42,7 +42,6 @@ class MCPAgent:
         llm: BaseLanguageModel,
         client: MCPClient | None = None,
         connectors: list[BaseConnector] | None = None,
-        server_name: str | None = None,
         max_steps: int = 5,
         auto_initialize: bool = False,
         memory_enabled: bool = True,
@@ -59,7 +58,6 @@ class MCPAgent:
             llm: The LangChain LLM to use.
             client: The MCPClient to use. If provided, connector is ignored.
             connectors: A list of MCP connectors to use if client is not provided.
-            server_name: The name of the server to use if client is provided.
             max_steps: The maximum number of steps to take.
             auto_initialize: Whether to automatically initialize the agent when run is called.
             memory_enabled: Whether to maintain conversation history for context.
@@ -72,7 +70,6 @@ class MCPAgent:
         self.llm = llm
         self.client = client
         self.connectors = connectors or []
-        self.server_name = server_name
         self.max_steps = max_steps
         self.auto_initialize = auto_initialize
         self.memory_enabled = memory_enabled
@@ -114,7 +111,7 @@ class MCPAgent:
         if self.use_server_manager and self.server_manager:
             await self.server_manager.initialize()
             # Get server management tools
-            management_tools = await self.server_manager.get_server_management_tools()
+            management_tools = self.server_manager.tools
             self._tools = management_tools
             logger.info(
                 f"🔧 Server manager mode active with {len(management_tools)} management tools"
@@ -391,7 +388,7 @@ class MCPAgent:
             for step_num in range(steps):
                 # --- Check for tool updates if using server manager ---
                 if self.use_server_manager and self.server_manager:
-                    current_tools = await self.server_manager.get_all_tools()
+                    current_tools = self.server_manager.tools
                     current_tool_names = {tool.name for tool in current_tools}
                     existing_tool_names = {tool.name for tool in self._tools}
 
@@ -412,7 +409,7 @@ class MCPAgent:
                             [tool.name for tool in self._tools], excluded_colors=["green", "red"]
                         )
 
-                logger.info(f"🔍 Step {step_num + 1}/{steps}")
+                logger.info(f"👣 Step {step_num + 1}/{steps}")
 
                 # --- Plan and execute the next step ---
                 try:
