@@ -174,8 +174,8 @@ class BaseConnector(ABC):
             raise RuntimeError("MCP client is not connected")
 
         logger.debug(f"Reading resource: {uri}")
-        resource = await self.client.read_resource(uri)
-        return resource.contents
+        result = await self.client.read_resource(uri)
+        return result
 
     async def list_prompts(self) -> list[Prompt]:
         """List all available prompts from the MCP implementation."""
@@ -198,8 +198,8 @@ class BaseConnector(ABC):
             raise RuntimeError("MCP client is not connected")
 
         logger.debug(f"Getting prompt: {name}")
-        prompt = await self.client.get_prompt(name, arguments)
-        return prompt
+        result = await self.client.get_prompt(name, arguments)
+        return result
 
     async def request(self, method: str, params: dict[str, Any] | None = None) -> Any:
         """Send a raw request to the MCP implementation."""

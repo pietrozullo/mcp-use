@@ -198,8 +198,8 @@ class LangChainAdapter(BaseAdapter):
             async def _arun(self, **kwargs: Any) -> Any:
                 logger.debug(f'Resource tool: "{self.name}" called')
                 try:
-                    contents = await self.tool_connector.read_resource(mcp_resource.uri)
-                    for content in contents:
+                    result = await self.tool_connector.read_resource(mcp_resource.uri)
+                    for content in result.contents:
                         # Attempt to decode bytes if necessary
                         if isinstance(content, bytes):
                             content_decoded = content.decode()
@@ -264,8 +264,8 @@ class LangChainAdapter(BaseAdapter):
             async def _arun(self, **kwargs: Any) -> Any:
                 logger.debug(f'Prompt tool: "{self.name}" called with args: {kwargs}')
                 try:
-                    messages = await self.tool_connector.get_prompt(self.name, kwargs)
-                    return messages
+                    result = await self.tool_connector.get_prompt(self.name, kwargs)
+                    return result.messages
                 except Exception as e:
                     if self.handle_tool_error:
                         return f"Error fetching prompt: {str(e)}"
