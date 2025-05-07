@@ -195,16 +195,14 @@ class TestHttpConnectorOperations(IsolatedAsyncioTestCase):
     def setUp(self):
         """Set up a connector for each test."""
         self.connector = HttpConnector(base_url="http://localhost:8000")
-
-        # Set up the connector as connected and initialized
+        # Most operations assume the connector is connected and the client exists.
         self.connector._connected = True
-        self.connector.client = MagicMock()
-        self.connector.client.call_tool = AsyncMock()
-        self.connector.client.list_tools = AsyncMock()
-        self.connector.client.list_resources = AsyncMock()
-        self.connector.client.read_resource = AsyncMock()
-        self.connector.client.request = AsyncMock()
-        self.connector.client.initialize = AsyncMock()
+        # Mock the internal client that HttpConnector methods will call.
+        # Client methods are async, so AsyncMock is appropriate.
+        self.connector.client = AsyncMock()
+        # _tools is populated by initialize(). Tests that rely on _tools
+        # should either call a mocked initialize() or set _tools directly.
+        self.connector._tools = None  # Ensure clean state for _tools
 
     async def test_call_tool(self, _):
         """Test calling a tool."""
@@ -268,12 +266,20 @@ class TestHttpConnectorOperations(IsolatedAsyncioTestCase):
 
     async def test_list_resources(self, _):
         """Test listing resources."""
-        self.connector.client.list_resources.return_value = [{"uri": "test/resource"}]
+        expected_resources_list = [{"uri": "test/resource"}]
+        # Mock the client's list_resources method to return an object
+        # that has a .resources attribute, as expected by the connector.
+        mock_client_response = MagicMock()
+        mock_client_response.resources = expected_resources_list
+        self.connector.client.list_resources.return_value = mock_client_response
 
+        # Call the connector's list_resources method
         result = await self.connector.list_resources()
 
-        self.connector.client.list_resources.assert_called_once()
-        self.assertEqual(result, [{"uri": "test/resource"}])
+        # Verify the client's method was called correctly by the connector
+        self.connector.client.list_resources.assert_called_once_with()
+        # The connector's list_resources method should return the list of resources directly.
+        self.assertEqual(result, expected_resources_list)
 
     async def test_list_resources_no_client(self, _):
         """Test listing resources when not connected."""
@@ -286,16 +292,35 @@ class TestHttpConnectorOperations(IsolatedAsyncioTestCase):
 
     async def test_read_resource(self, _):
         """Test reading a resource."""
-        mock_resource = MagicMock()
-        mock_resource.content = b"test content"
-        mock_resource.mimeType = "text/plain"
-        self.connector.client.read_resource.return_value = mock_resource
+        # Define the detailed structure that the connector's read_resource method
+        # will parse from the object returned by client.read_resource().
+        # This assumes a common MCP pattern where data is nested.
+        mock_content_part = MagicMock()
+        mock_content_part.content = b"test content"  # Changed from .text
+        mock_content_part.mimeType = "text/plain"  # Changed from .mime_type, note camelCase
 
-        content, mimetype = await self.connector.read_resource("test/resource")
+        mock_result_obj = MagicMock()
+        mock_result_obj.contents = [mock_content_part]
 
+        # This is the object returned by self.connector.client.read_resource()
+        mock_client_return = MagicMock()
+        mock_client_return.result = mock_result_obj  # Actual data is nested under 'result'
+
+        self.connector.client.read_resource.return_value = mock_client_return
+
+        # Act: Call the connector's method
+        # The connector's read_resource method returns a ReadResourceResult object
+        read_resource_result = await self.connector.read_resource("test/resource")
+
+        # Assert: Verify client interaction and the processed result
         self.connector.client.read_resource.assert_called_once_with("test/resource")
-        self.assertEqual(content, b"test content")
-        self.assertEqual(mimetype, "text/plain")
+        # Now, assert the attributes of the returned ReadResourceResult object
+        # based on the mocked client_return object's structure.
+        self.assertIsNotNone(read_resource_result.result)
+        self.assertIsNotNone(read_resource_result.result.contents)
+        self.assertEqual(len(read_resource_result.result.contents), 1)
+        self.assertEqual(read_resource_result.result.contents[0].content, b"test content")
+        self.assertEqual(read_resource_result.result.contents[0].mimeType, "text/plain")
 
     async def test_read_resource_no_client(self, _):
         """Test reading a resource when not connected."""
