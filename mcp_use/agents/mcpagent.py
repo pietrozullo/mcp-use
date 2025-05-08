@@ -6,6 +6,7 @@ to provide a simple interface for using MCP tools with different LLMs.
 """
 
 import logging
+from collections.abc import AsyncIterator, Iterator
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.globals import set_debug
@@ -303,6 +304,137 @@ class MCPAgent:
             List of tool names that are not available.
         """
         return self.disallowed_tools
+
+    # ====================================================
+    # Streaming helpers
+    # ====================================================
+
+    async def _generate_response_chunks_async(
+        self,
+        query: str,
+        max_steps: int | None = None,
+        manage_connector: bool = True,
+        external_history: list[BaseMessage] | None = None,
+    ) -> AsyncIterator[str]:
+        """Internal async generator yielding response chunks.
+
+        The implementation purposefully keeps the logic compact:
+        1. Ensure the agent is initialised (optionally handling connector
+           lifecycle).
+        2. Forward the *same* inputs we use for ``run`` to LangChain's
+           ``AgentExecutor.astream``.
+        3. Diff the growing ``output`` field coming from LangChain and yield
+           only the new part so the caller receives *incremental* chunks.
+        4. Persist conversation history when memory is enabled.
+        """
+
+        # 1. Initialise on-demand ------------------------------------------------
+        initialised_here = False
+        if (manage_connector and not self._initialized) or (
+            not self._initialized and self.auto_initialize
+        ):
+            await self.initialize()
+            initialised_here = True
+
+        if not self._agent_executor:
+            raise RuntimeError("MCP agent failed to initialise – call initialise() first?")
+
+        # 2. Build inputs --------------------------------------------------------
+        effective_max_steps = max_steps or self.max_steps
+        self._agent_executor.max_iterations = effective_max_steps
+
+        if self.memory_enabled:
+            self.add_to_history(HumanMessage(content=query))
+
+        history_to_use = (
+            external_history if external_history is not None else self._conversation_history
+        )
+        langchain_history: list[BaseMessage] = [
+            m for m in history_to_use if isinstance(m, HumanMessage | AIMessage)
+        ]
+        inputs = {"input": query, "chat_history": langchain_history}
+
+        # 3. Stream & diff -------------------------------------------------------
+        accumulated = ""
+        async for event in self._agent_executor.astream(inputs):
+            yield event
+
+        # 4. Persist assistant message ------------------------------------------
+        if self.memory_enabled and accumulated:
+            self.add_to_history(AIMessage(content=accumulated))
+
+        # 5. House-keeping -------------------------------------------------------
+        if initialised_here and manage_connector:
+            await self.close()
+
+    def stream(
+        self,
+        query: str,
+        max_steps: int | None = None,
+        manage_connector: bool = True,
+        external_history: list[BaseMessage] | None = None,
+    ) -> Iterator[str]:
+        """Synchronous wrapper around :py:meth:`astream`.
+
+        The implementation launches the async generator in a background thread
+        and exposes an ordinary *blocking* iterator so users can simply::
+
+            for chunk in agent.stream("hello"):
+                print(chunk, end="|", flush=True)
+        """
+
+        import asyncio
+        import queue
+        import threading
+
+        q: "queue.Queue[str | None]" = queue.Queue()
+
+        async def _producer() -> None:
+            async for chunk in self._generate_response_chunks_async(
+                query=query,
+                max_steps=max_steps,
+                manage_connector=manage_connector,
+                external_history=external_history,
+            ):
+                q.put(chunk)
+            q.put(None)  # Sentinel
+
+        def _runner() -> None:
+            asyncio.run(_producer())
+
+        threading.Thread(target=_runner, daemon=True).start()
+
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            yield item
+
+    async def astream(
+        self,
+        query: str,
+        max_steps: int | None = None,
+        manage_connector: bool = True,
+        external_history: list[BaseMessage] | None = None,
+    ) -> AsyncIterator[str]:
+        """Asynchronous streaming interface.
+
+        Example::
+
+            async for chunk in agent.astream("hello"):
+                print(chunk, end="|", flush=True)
+        """
+        async for chunk in self._generate_response_chunks_async(
+            query=query,
+            max_steps=max_steps,
+            manage_connector=manage_connector,
+            external_history=external_history,
+        ):
+            yield chunk
+
+    # ====================================================
+    # End streaming helpers
+    # ====================================================
 
     async def run(
         self,
