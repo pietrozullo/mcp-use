@@ -6,7 +6,7 @@ to provide a simple interface for using MCP tools with different LLMs.
 """
 
 import logging
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.globals import set_debug
@@ -366,49 +366,6 @@ class MCPAgent:
         # 5. House-keeping -------------------------------------------------------
         if initialised_here and manage_connector:
             await self.close()
-
-    def stream(
-        self,
-        query: str,
-        max_steps: int | None = None,
-        manage_connector: bool = True,
-        external_history: list[BaseMessage] | None = None,
-    ) -> Iterator[str]:
-        """Synchronous wrapper around :py:meth:`astream`.
-
-        The implementation launches the async generator in a background thread
-        and exposes an ordinary *blocking* iterator so users can simply::
-
-            for chunk in agent.stream("hello"):
-                print(chunk, end="|", flush=True)
-        """
-
-        import asyncio
-        import queue
-        import threading
-
-        q: "queue.Queue[str | None]" = queue.Queue()
-
-        async def _producer() -> None:
-            async for chunk in self._generate_response_chunks_async(
-                query=query,
-                max_steps=max_steps,
-                manage_connector=manage_connector,
-                external_history=external_history,
-            ):
-                q.put(chunk)
-            q.put(None)  # Sentinel
-
-        def _runner() -> None:
-            asyncio.run(_producer())
-
-        threading.Thread(target=_runner, daemon=True).start()
-
-        while True:
-            item = q.get()
-            if item is None:
-                break
-            yield item
 
     async def astream(
         self,
