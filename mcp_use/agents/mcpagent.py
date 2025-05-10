@@ -305,10 +305,6 @@ class MCPAgent:
         """
         return self.disallowed_tools
 
-    # ====================================================
-    # Streaming helpers
-    # ====================================================
-
     async def _generate_response_chunks_async(
         self,
         query: str,
@@ -388,10 +384,6 @@ class MCPAgent:
             external_history=external_history,
         ):
             yield chunk
-
-    # ====================================================
-    # End streaming helpers
-    # ====================================================
 
     async def run(
         self,

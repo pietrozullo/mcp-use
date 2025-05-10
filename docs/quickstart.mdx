@@ -333,6 +333,17 @@ if __name__ == "__main__":
 
 This example demonstrates how to connect to an MCP server running on a specific HTTP port. Make sure to start your MCP server before running this example.
 
+## Streaming Agent Output
+
+You can stream the agent's output as it is generated using the `astream` method:
+
+```python
+async for chunk in agent.astream("Find the best restaurant in San Francisco"):
+    print(chunk["messages"], end="", flush=True)
+```
+
+Each chunk contains incremental results, tool actions, and intermediate steps.
+
 ## Next Steps
 
 - Learn about [Configuration Options](/essentials/configuration)
